@@ -236,6 +236,8 @@ class SearchView(StaffMixin, View):
         ("New booking", "dashboard:booking_new", "front", "plus-circle"),
         ("Guests", "dashboard:guests", "front", "people"),
         ("Messages", "dashboard:messages", "front", "whatsapp"),
+        ("Charge to room", "dashboard:charges", "charges", "plus-square"),
+        ("Extras menu", "dashboard:extras_menu", "property", "card-list"),
         ("Payments", "dashboard:payments", "payments", "cash-stack"),
         ("Close the till", "dashboard:till", "till", "safe"),
         ("Finance overview", "dashboard:finance", "finance", "bank"),

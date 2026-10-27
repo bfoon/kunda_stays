@@ -297,3 +297,106 @@ def revenue_between(start, end):
         )["s"]
         or ZERO
     )
+
+
+# ---------- room charges (the guest's tab) ----------
+
+VOID_WINDOW_MINUTES = 30
+
+
+def post_charges(booking, lines, user=None, source="desk", note=""):
+    """Add lines to a guest's tab in one transaction.
+
+    lines: [{"item": ExtraItem | None, "quantity": int, "description": str, "unit_price": Decimal, "category": str}]
+    Stock is taken under a row lock so two staff can't sell the last bottle twice.
+    """
+    from django.db.models import F
+
+    from .models import ExtraItem, RoomCharge
+
+    if not booking.accepts_charges:
+        raise BookingError("This booking can't take room charges (it isn't in house or recently checked out).")
+    lines = [ln for ln in lines if ln.get("quantity", 0) > 0]
+    if not lines:
+        raise BookingError("Add at least one item.")
+    today = timezone.localdate()
+    created = []
+    with transaction.atomic():
+        for ln in lines:
+            item = ln.get("item")
+            qty = int(ln["quantity"])
+            if item is not None:
+                item = ExtraItem.objects.select_for_update().get(pk=item.pk)
+                if item.stock is not None:
+                    if item.stock < qty:
+                        raise BookingError(f"Only {item.stock} {item.name} left in stock.")
+                    ExtraItem.objects.filter(pk=item.pk).update(stock=F("stock") - qty)
+                price = ln.get("unit_price") if ln.get("unit_price") is not None else item.price
+                desc, cat = item.name, item.category
+            else:
+                price = ln["unit_price"]
+                desc, cat = ln["description"].strip()[:120], ln.get("category") or "other"
+                if not desc:
+                    raise BookingError("A custom charge needs a description.")
+            if price is None or price < 0:
+                raise BookingError("Prices can't be negative. Use a discount on the booking instead.")
+            created.append(RoomCharge.objects.create(
+                booking=booking, item=item, description=desc, category=cat, quantity=qty, unit_price=_q(price),
+                amount=_q(price * qty), charged_on=today, source=source, note=(ln.get("note") or note or "")[:200], posted_by=user,
+            ))
+        booking.recompute_extras()
+    return created
+
+
+def can_void(charge, user):
+    from dashboard.roles import can
+
+    if charge.is_void:
+        return False
+    if can(user, "finance") or user.is_superuser or can(user, "staff"):
+        return True
+    recent = timezone.now() - charge.created_at <= timedelta(minutes=VOID_WINDOW_MINUTES)
+    return charge.posted_by_id == user.id and recent
+
+
+def void_charge(charge, user, reason):
+    """Cancel a tab line (wrong room, wrong item, comped). Restores stock. Kept on record."""
+    from django.db.models import F
+
+    from .models import ExtraItem
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise BookingError("Say why you're voiding this charge.")
+    if not can_void(charge, user):
+        raise BookingError(f"Only the person who posted it (within {VOID_WINDOW_MINUTES} minutes), finance or a manager can void a charge.")
+    with transaction.atomic():
+        charge.voided_at, charge.voided_by, charge.void_reason = timezone.now(), user, reason[:200]
+        charge.save(update_fields=["voided_at", "voided_by", "void_reason", "updated_at"])
+        if charge.item_id:
+            ExtraItem.objects.filter(pk=charge.item_id, stock__isnull=False).update(stock=F("stock") + charge.quantity)
+        charge.booking.recompute_extras()
+    return charge
+
+
+def tab_summary(booking):
+    """Live tab lines grouped by day, plus category totals — for the bill, the guest page and WhatsApp."""
+    charges = list(booking.charges.filter(voided_at__isnull=True).select_related("posted_by"))
+    days, by_cat = [], {}
+    for c in charges:
+        if not days or days[-1]["day"] != c.charged_on:
+            days.append({"day": c.charged_on, "lines": [], "total": ZERO})
+        days[-1]["lines"].append(c)
+        days[-1]["total"] += c.amount
+        # Guest-facing view: the same item at the same price on the same day reads as one line ("6 × Coffee")
+        key = (c.description, c.unit_price)
+        grouped = days[-1].setdefault("_g", {})
+        if key in grouped:
+            grouped[key]["quantity"] += c.quantity
+            grouped[key]["amount"] += c.amount
+        else:
+            grouped[key] = {"description": c.description, "quantity": c.quantity, "unit_price": c.unit_price, "amount": c.amount, "icon": c.icon}
+        by_cat[c.get_category_display()] = by_cat.get(c.get_category_display(), ZERO) + c.amount
+    for d in days:
+        d["grouped"] = list(d.pop("_g", {}).values())
+    return {"charges": charges, "days": days, "by_category": sorted(by_cat.items(), key=lambda kv: -kv[1]), "total": sum((c.amount for c in charges), ZERO)}

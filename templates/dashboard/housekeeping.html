@@ -46,6 +46,7 @@
     {% else %}
     <form method="post">{% csrf_token %}<input type="hidden" name="apartment" value="{{ a.pk }}"><input type="hidden" name="state" value="dirty"><button class="btn btn-ghost w-100"><i class="bi bi-arrow-counterclockwise"></i> Needs cleaning again</button></form>
     {% endif %}
+    {% if c.guest and 'charges' in portal.sections %}<a href="{% url 'dashboard:charges' %}?booking={{ c.guest.pk }}" class="btn btn-sm btn-ghost"><i class="bi bi-box2-heart"></i> Minibar &amp; extras for {{ c.guest.guest.first_name }}</a>{% endif %}
     {% if a.housekeeping_at %}<div class="ks-hk-meta">Updated {{ a.housekeeping_at|timesince }} ago{% if a.housekeeping_by %} by {{ a.housekeeping_by.first_name|default:a.housekeeping_by.username }}{% endif %}</div>{% endif %}
   </article>
   {% endwith %}{% empty %}

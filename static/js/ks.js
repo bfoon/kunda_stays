@@ -155,3 +155,42 @@
   const waWrap = document.getElementById("ks-wa-wrap");
   if (same && waWrap) same.addEventListener("change", () => waWrap.classList.toggle("d-none", same.checked));
 })();
+
+/* In-stay ordering: guest builds an order, it opens WhatsApp to reception with an itemized message */
+(function () {
+  "use strict";
+  const box = document.querySelector("[data-guest-order]");
+  if (!box) return;
+  const sym = document.body.dataset.currency || "D";
+  const fmt = (n) => sym + " " + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const rows = box.querySelectorAll(".ks-order-row");
+  const send = box.querySelector("[data-order-send]"), label = box.querySelector("[data-order-label]"), note = box.querySelector("[data-order-note]");
+  const update = () => {
+    const lines = [];
+    let total = 0, count = 0;
+    rows.forEach((r) => {
+      const q = Number(r.querySelector("output").value || r.querySelector("output").textContent);
+      r.classList.toggle("on", q > 0);
+      if (q > 0) { lines.push(q + " × " + r.dataset.name); total += q * Number(r.dataset.price); count += q; }
+    });
+    if (!count) {
+      send.classList.add("disabled"); send.setAttribute("aria-disabled", "true"); send.href = "#";
+      label.textContent = "Choose something to order";
+      return;
+    }
+    let msg = "🛎️ *Order for Apt " + box.dataset.apt + "* (" + box.dataset.ref + ")\n\n" + lines.map((l) => "• " + l).join("\n") + "\n\nAbout " + fmt(total) + " — please add it to my room tab.";
+    if (note.value.trim()) msg += "\nNote: " + note.value.trim();
+    send.href = "https://wa.me/" + box.dataset.wa + "?text=" + encodeURIComponent(msg);
+    send.classList.remove("disabled"); send.removeAttribute("aria-disabled");
+    label.textContent = "Send order · " + count + " item" + (count > 1 ? "s" : "") + " · " + fmt(total);
+  };
+  rows.forEach((r) => {
+    const out = r.querySelector("output");
+    r.querySelectorAll("[data-step]").forEach((b) => b.addEventListener("click", () => {
+      const v = Math.max(0, Math.min(20, Number(out.textContent) + Number(b.dataset.step)));
+      out.textContent = v; out.value = v; update();
+    }));
+  });
+  note.addEventListener("input", update);
+  update();
+})();

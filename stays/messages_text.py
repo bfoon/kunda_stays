@@ -21,7 +21,7 @@ def booking_received(b):
     return (
         f"Hello {b.guest.first_name}, thank you for choosing {k['name']}! 🌴\n\n"
         f"*Booking {b.reference}*\n{_stay(b)}\n\n"
-        f"Total: {_money(b.total_amount)}\n"
+        f"Total: {_money(b.grand_total)}\n"
         f"To confirm, pay {_money(b.deposit_required)} within {k['hold_hours']} hours.\n"
         f"Payment options and your booking page:\n{_url(b)}"
     )
@@ -71,3 +71,29 @@ def hold_released(b):
         f"Hello {b.guest.first_name}, we didn't receive a deposit for booking {b.reference}, "
         f"so the dates have been released. Reply here if you'd still like to stay — we'll help you rebook."
     )
+
+
+def room_bill(b):
+    """Itemized bill: accommodation, every room charge by day, payments and what's left to pay."""
+    from .services import tab_summary
+
+    tab = tab_summary(b)
+    lines = [f"🧾 *Your bill — {b.reference}*", _stay(b), "", f"Accommodation: {_money(b.total_amount)}"]
+    if tab["days"]:
+        lines.append("")
+        lines.append("*Room charges*")
+        for d in tab["days"]:
+            lines.append(f"_{d['day']:%a %d %b}_")
+            for c in d["grouped"]:
+                qty = f"{c['quantity']} × " if c["quantity"] > 1 else ""
+                lines.append(f"• {qty}{c['description']} — {_money(c['amount'])}")
+        lines.append(f"Extras total: {_money(tab['total'])}")
+    lines += [
+        "",
+        f"*Total: {_money(b.grand_total)}*",
+        f"Paid: {_money(b.amount_paid)}",
+        f"*Balance: {_money(b.balance)}*" if b.balance else "✅ All paid — thank you!",
+    ]
+    if b.balance:
+        lines += ["", f"Pay by Wave, Afrimoney, QMoney, bank transfer or at reception:\n{_url(b)}"]
+    return "\n".join(lines)

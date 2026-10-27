@@ -181,6 +181,104 @@
     draw();
   }
 
+  /* ---------- charge to room (POS) ---------- */
+  const pos = document.querySelector("[data-pos]");
+  if (pos) {
+    const ticket = [];  // {key, item, name, price, qty, stock, custom, category}
+    const linesEl = pos.querySelector("[data-lines]"), totalEl = pos.querySelector("[data-total]");
+    const submit = pos.querySelector("[data-submit]"), submitLabel = pos.querySelector("[data-submit-label]");
+    const hidden = pos.querySelector("[name=ticket]"), bookingInput = pos.querySelector("[name=booking]");
+    const bar = document.querySelector("[data-ticket-bar]");
+    const roomLabel = pos.querySelector("[data-ticket-room]").textContent.trim();
+
+    const draw = () => {
+      let total = 0, count = 0;
+      linesEl.innerHTML = ticket.length ? "" : '<li class="ks-receipt-empty">Tap items to add them.</li>';
+      ticket.forEach((l, idx) => {
+        total += l.price * l.qty; count += l.qty;
+        const li = document.createElement("li");
+        li.innerHTML = "<span>" + esc(l.name) + (l.qty > 1 ? ' <small class="ks-muted">@ ' + money(l.price) + "</small>" : "") + "</span>" +
+          '<span class="ks-stepper"><button type="button" data-d="-1" aria-label="One fewer">−</button><output>' + l.qty + '</output><button type="button" data-d="1" aria-label="One more">+</button></span>' +
+          '<span class="line-amt">' + money(l.price * l.qty) + "</span>";
+        li.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => change(idx, Number(b.dataset.d))));
+        linesEl.appendChild(li);
+      });
+      pos.querySelectorAll(".ks-tile[data-item]").forEach((t) => {
+        const l = ticket.find((x) => x.item === t.dataset.item);
+        t.classList.toggle("picked", !!l);
+        t.querySelector(".qty").textContent = l ? l.qty : "";
+      });
+      totalEl.textContent = money(total);
+      hidden.value = JSON.stringify(ticket.map((l) => l.custom ? { custom: l.name, price: l.price, qty: l.qty, category: l.category } : { item: l.item, qty: l.qty }));
+      const ready = count > 0 && bookingInput.value;
+      submit.disabled = !ready;
+      submitLabel.textContent = !bookingInput.value ? "Pick a room first" : count ? "Charge " + money(total) + " to " + roomLabel.split(" · ")[0] : "Charge to room";
+      if (bar) {
+        bar.hidden = count === 0;
+        bar.querySelector("[data-bar-count]").textContent = count + (count === 1 ? " item" : " items");
+        bar.querySelector("[data-bar-total]").textContent = money(total);
+      }
+    };
+    const change = (idx, d) => {
+      const l = ticket[idx];
+      const next = l.qty + d;
+      if (l.stock != null && next > l.stock) { flash("Only " + l.stock + " " + l.name + " in stock."); return; }
+      if (next <= 0) ticket.splice(idx, 1); else l.qty = Math.min(next, 99);
+      draw();
+    };
+    const flash = (msg) => {
+      totalEl.closest(".ks-receipt").animate([{ transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "none" }], { duration: 220 });
+      submitLabel.textContent = msg;
+      setTimeout(draw, 1600);
+    };
+
+    pos.querySelectorAll(".ks-tile[data-item]").forEach((t) => t.addEventListener("click", () => {
+      const idx = ticket.findIndex((x) => x.item === t.dataset.item);
+      if (idx >= 0) { change(idx, 1); return; }
+      ticket.push({ item: t.dataset.item, name: t.dataset.name, price: Number(t.dataset.price), qty: 1, stock: t.dataset.stock != null ? Number(t.dataset.stock) : null });
+      draw();
+    }));
+
+    pos.querySelectorAll("[data-cat]").forEach((a) => {
+      if (a.tagName !== "A") return;
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        pos.querySelectorAll("a[data-cat]").forEach((x) => x.classList.toggle("on", x === a));
+        pos.querySelectorAll(".ks-tile").forEach((t) => t.classList.toggle("hide", a.dataset.cat !== "all" && t.dataset.cat !== a.dataset.cat));
+      });
+    });
+
+    const cDesc = document.getElementById("c-desc"), cPrice = document.getElementById("c-price"), cCat = document.getElementById("c-cat");
+    const addCustom = () => {
+      const name = cDesc.value.trim(), price = Number(cPrice.value);
+      if (!name || !(price >= 0) || cPrice.value === "") { (name ? cPrice : cDesc).focus(); return; }
+      ticket.push({ custom: true, name: name, price: price, qty: 1, category: cCat.value, stock: null });
+      cDesc.value = ""; cPrice.value = "";
+      draw();
+    };
+    pos.querySelector("[data-add-custom]").addEventListener("click", addCustom);
+    [cDesc, cPrice].forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }));
+    pos.querySelectorAll(".ks-void-pop input").forEach((i) => i.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); if (i.value.trim()) document.getElementById(i.getAttribute("form")).requestSubmit(); }
+    }));
+    pos.addEventListener("submit", () => { submit.disabled = true; submitLabel.textContent = "Charging…"; });
+    draw();
+  }
+
+  /* ---------- booking page: quick add to tab ---------- */
+  const quick = document.querySelector("[data-quick-charge]");
+  if (quick) {
+    const sel = quick.querySelector("[name=item]");
+    const toggle = () => {
+      const custom = sel.value === "";
+      quick.querySelectorAll("[data-custom]").forEach((el) => el.classList.toggle("d-none", !custom));
+      quick.querySelector("[name=description]").required = custom;
+      quick.querySelector("[name=unit_price]").required = custom;
+    };
+    sel.addEventListener("change", toggle);
+    toggle();
+  }
+
   /* ---------- confirm buttons ---------- */
   document.querySelectorAll("[data-confirm]").forEach((el) => el.addEventListener("click", (e) => { if (!confirm(el.dataset.confirm)) e.preventDefault(); }));
 })();

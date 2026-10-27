@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views import View
 
-from stays.models import ZERO, Apartment, Booking, CashUp, Expense, MaintenanceTicket, Payment
+from stays.models import ZERO, Apartment, Booking, CashUp, Expense, ExtraItem, MaintenanceTicket, Payment, RoomCharge
 from stays.utils import parse_date, parse_decimal, parse_int
 
 from .roles import can
@@ -136,7 +136,16 @@ class FinanceView(StaffMixin, View):
             buckets[i]["total"] += bal
         receivable = sum((x["total"] for x in buckets), ZERO)
 
+        cat_names = dict(ExtraItem.CATEGORY_CHOICES)
+        extras_qs = RoomCharge.objects.filter(voided_at__isnull=True, charged_on__gte=start, charged_on__lt=end)
+        extras = [{"label": cat_names.get(r["category"], r["category"]), "total": r["t"], "n": r["n"], "icon": ExtraItem.ICONS.get(r["category"], "tag")}
+                  for r in extras_qs.values("category").annotate(t=Sum("amount"), n=Sum("quantity")).order_by("-t")]
+        extras_total = sum((r["total"] for r in extras), ZERO)
+        for r in extras:
+            r["pct"] = int(r["total"] / extras_total * 100) if extras_total else 0
+
         return render(request, "dashboard/finance.html", {
+            "extras": extras, "extras_total": extras_total,
             "start": start, "end": end - timedelta(days=1), "label": label, "key": key,
             "income": income, "spent": spent, "net": net, "margin": int(net / income * 100) if income > 0 else None,
             "by_cat": by_cat, "by_method": by_method, "apt_rows": apt_rows, "shared": shared,

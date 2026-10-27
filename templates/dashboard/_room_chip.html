@@ -1,0 +1,4 @@
+{% load stays_tags %}<a href="?booking={{ b.pk }}" class="ks-room-chip {% if selected.pk == b.pk %}on{% endif %} {% if tag %}is-muted{% endif %}" role="radio" aria-checked="{% if selected.pk == b.pk %}true{% else %}false{% endif %}">
+  <span class="ks-plaque position-static">{{ b.apartment.number }}</span>
+  <span class="who"><strong>{{ b.guest.first_name }}</strong><small>{% if tag == "late" %}Left {{ b.check_out|date:"D j M" }}{% elif tag %}{{ tag }}{% elif b.extras_total %}Tab {{ b.extras_total|money }}{% else %}No charges yet{% endif %}</small></span>
+</a>

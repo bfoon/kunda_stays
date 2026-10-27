@@ -99,7 +99,7 @@ def receipt_pdf(payment):
         ("Method", payment.get_method_display()),
         ("Transaction ref.", payment.reference or "—"),
         ("Date", paid_at),
-        ("Booking total", _money(b.total_amount)),
+        ("Bill total" if b.extras_total else "Booking total", _money(b.grand_total)),
         ("Paid to date", _money(b.amount_paid)),
         ("Balance due", _money(b.balance)),
     ])
@@ -114,13 +114,80 @@ def receipt_pdf(payment):
     return buf.getvalue()
 
 
+class _Pager:
+    """Writes rows down an A4 page and starts a new page (with a slim header) when it runs out of room."""
+
+    def __init__(self, c, w, h, title, number):
+        self.c, self.w, self.h, self.title, self.number = c, w, h, title, number
+        self.page = 1
+        self.x, self.width = 16 * mm, w - 32 * mm
+
+    def need(self, y, space):
+        if y - space >= 36 * mm:
+            return y
+        self.footer()
+        self.c.showPage()
+        self.page += 1
+        c, w, h = self.c, self.w, self.h
+        c.setFillColor(RIVER)
+        c.rect(0, h - 16 * mm, w, 16 * mm, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(14 * mm, h - 10 * mm, settings.KUNDA["name"])
+        c.drawRightString(w - 14 * mm, h - 10 * mm, f"{self.title} {self.number} · continued")
+        return h - 28 * mm
+
+    def footer(self):
+        self.c.setFont("Helvetica", 7.5)
+        self.c.setFillColor(MUTED)
+        self.c.drawRightString(self.w - 16 * mm, 10 * mm, f"Page {self.page}")
+
+    def heading(self, y, text, right=""):
+        y = self.need(y, 16 * mm)
+        c = self.c
+        c.setFont("Helvetica-Bold", 11)
+        c.setFillColor(RIVER)
+        c.drawString(self.x, y, text)
+        if right:
+            c.setFont("Helvetica", 8.5)
+            c.setFillColor(MUTED)
+            c.drawRightString(self.x + self.width, y, right)
+        return y - 8 * mm
+
+    def row(self, y, label, value, *, muted=False, strike=False, bold=False, indent=0):
+        y = self.need(y, 8 * mm)
+        c = self.c
+        c.setFont("Helvetica-Bold" if bold else "Helvetica", 9)
+        c.setFillColor(MUTED if muted else INK)
+        c.drawString(self.x + indent, y, label[:95])
+        c.setFont("Helvetica-Bold", 9.5)
+        c.drawRightString(self.x + self.width, y, str(value))
+        if strike:
+            c.setStrokeColor(MUTED)
+            c.line(self.x + indent, y + 1.2 * mm, self.x + self.width, y + 1.2 * mm)
+        c.setStrokeColor(LINE)
+        c.line(self.x, y - 2.5 * mm, self.x + self.width, y - 2.5 * mm)
+        return y - 7 * mm
+
+
 def statement_pdf(booking):
+    """The guest's bill: accommodation, every room charge by day, payments and the balance.
+
+    Before arrival it is titled "Booking statement"; once the guest is in or has left it is the "Guest bill".
+    """
+    from .services import tab_summary
+
     b = booking
+    k = settings.KUNDA
+    tab = tab_summary(b)
+    title = "GUEST BILL" if b.status in ("checked_in", "checked_out") else "BOOKING STATEMENT"
     buf = BytesIO()
     w, h = A4
     c = canvas.Canvas(buf, pagesize=A4)
-    c.setTitle(f"Statement {b.reference}")
-    _header(c, w, h, "BOOKING STATEMENT", b.reference)
+    c.setTitle(f"{title.title()} {b.reference}")
+    _header(c, w, h, title, b.reference)
+    pg = _Pager(c, w, h, title.title(), b.reference)
+
     y = h - 50 * mm
     c.setFillColor(INK)
     c.setFont("Helvetica-Bold", 13)
@@ -128,46 +195,68 @@ def statement_pdf(booking):
     c.setFont("Helvetica", 9)
     c.setFillColor(MUTED)
     c.drawString(16 * mm, y - 5 * mm, f"{b.guest.phone}   {b.guest.email}")
-    c.drawRightString(w - 16 * mm, y, f"Status: {b.get_status_display()}")
+    c.drawRightString(w - 16 * mm, y, f"Apt {b.apartment.number} – {b.apartment.name}")
+    c.drawRightString(w - 16 * mm, y - 5 * mm, f"{b.check_in:%d %b %Y} → {b.check_out:%d %b %Y} · {b.nights} night{'s' if b.nights != 1 else ''}")
     y -= 16 * mm
-    y = _rows(c, 16 * mm, y, w - 32 * mm, [
-        ("Apartment", f"{b.apartment.number} – {b.apartment.name}"),
-        ("Check-in", f"{b.check_in:%A %d %B %Y} from {settings.KUNDA['checkin_time']}"),
-        ("Check-out", f"{b.check_out:%A %d %B %Y} by {settings.KUNDA['checkout_time']}"),
-        ("Guests", f"{b.adults} adult(s), {b.children} child(ren)"),
-        (f"Accommodation ({b.nights} nights, {b.get_rate_plan_display().lower()})", _money(b.subtotal)),
-        ("Cleaning fee", _money(b.cleaning_fee)),
-        ("Discount", f"− {_money(b.discount)}"),
-        ("Total", _money(b.total_amount)),
-    ])
-    y -= 6 * mm
-    c.setFont("Helvetica-Bold", 11)
-    c.setFillColor(RIVER)
-    c.drawString(16 * mm, y, "Payments")
-    y -= 8 * mm
-    rows = []
+
+    y = pg.heading(y, "Accommodation")
+    y = pg.row(y, f"{b.nights} night{'s' if b.nights != 1 else ''} · {b.get_rate_plan_display().lower()}", _money(b.subtotal))
+    if b.cleaning_fee:
+        y = pg.row(y, "Cleaning fee", _money(b.cleaning_fee))
+    if b.discount:
+        y = pg.row(y, "Discount", f"− {_money(b.discount)}")
+    y = pg.row(y, "Accommodation total", _money(b.total_amount), bold=True)
+
+    if tab["days"]:
+        y -= 4 * mm
+        y = pg.heading(y, "Room charges", f"{len(tab['charges'])} item{'s' if len(tab['charges']) != 1 else ''}")
+        for d in tab["days"]:
+            y = pg.need(y, 16 * mm)
+            c.setFont("Helvetica-Bold", 8.5)
+            c.setFillColor(MUTED)
+            c.drawString(16 * mm, y, f"{d['day']:%A %d %B}".upper())
+            c.drawRightString(w - 16 * mm, y, _money(d["total"]))
+            y -= 6 * mm
+            for ch in d["grouped"]:
+                qty = f"{ch['quantity']} × " if ch["quantity"] > 1 else ""
+                each = f"  @ {_money(ch['unit_price'])}" if ch["quantity"] > 1 else ""
+                y = pg.row(y, f"{qty}{ch['description']}{each}", _money(ch["amount"]), indent=3 * mm)
+        y = pg.row(y, "Room charges total", _money(tab["total"]), bold=True)
+
+    y -= 4 * mm
+    y = pg.heading(y, "Payments")
+    paid_rows = 0
     for p in b.payments.all().order_by("created_at"):
         if p.status != "confirmed":
             continue
         sign = "− " if p.kind == "refund" else ""
-        rows.append((f"{p.paid_at:%d %b %Y} · {p.get_kind_display()} · {p.get_method_display()} · {p.receipt_number}", f"{sign}{_money(p.amount)}"))
-    if not rows:
-        rows = [("No confirmed payments yet", "")]
-    y = _rows(c, 16 * mm, y, w - 32 * mm, rows)
-    y -= 4 * mm
+        y = pg.row(y, f"{p.paid_at:%d %b %Y} · {p.get_kind_display()} · {p.get_method_display()} · {p.receipt_number}", f"{sign}{_money(p.amount)}")
+        paid_rows += 1
+    if not paid_rows:
+        y = pg.row(y, "No confirmed payments yet", "", muted=True)
+
+    y = pg.need(y, 30 * mm) - 4 * mm
     c.setFillColor(colors.HexColor("#EEF4F3"))
-    c.roundRect(16 * mm, y - 14 * mm, w - 32 * mm, 18 * mm, 3 * mm, stroke=0, fill=1)
+    c.roundRect(16 * mm, y - 22 * mm, w - 32 * mm, 26 * mm, 3 * mm, stroke=0, fill=1)
     c.setFillColor(INK)
-    c.setFont("Helvetica", 10)
-    c.drawString(22 * mm, y - 4 * mm, f"Paid {_money(b.amount_paid)} of {_money(b.total_amount)}")
-    c.setFont("Helvetica-Bold", 14)
-    c.setFillColor(RIVER)
-    c.drawRightString(w - 22 * mm, y - 6 * mm, f"Balance {_money(b.balance)}")
-    _qr(c, settings.KUNDA["site_url"] + b.get_absolute_url(), w - 46 * mm, 16 * mm, 30 * mm)
+    c.setFont("Helvetica", 9.5)
+    c.drawString(22 * mm, y - 3 * mm, f"Accommodation {_money(b.total_amount)}" + (f"  +  room charges {_money(b.extras_total)}" if b.extras_total else ""))
+    c.drawString(22 * mm, y - 9 * mm, f"Total {_money(b.grand_total)}  ·  paid {_money(b.amount_paid)}")
+    c.setFont("Helvetica-Bold", 15)
+    c.setFillColor(RIVER if b.balance else colors.HexColor("#1F6F50"))
+    c.drawRightString(w - 22 * mm, y - 8 * mm, f"Balance {_money(b.balance)}" if b.balance else "Paid in full")
+    if b.credit:
+        c.setFont("Helvetica", 9)
+        c.drawRightString(w - 22 * mm, y - 15 * mm, f"Credit due to guest {_money(b.credit)}")
+    # need() above keeps the summary box above 50 mm, so the footer block below never overlaps it
+    _qr(c, k["site_url"] + b.get_absolute_url(), w - 40 * mm, 12 * mm, 24 * mm)
     c.setFont("Helvetica", 8.5)
     c.setFillColor(MUTED)
-    c.drawString(16 * mm, 30 * mm, "Pay by Wave, Afrimoney, QMoney, bank transfer or cash at reception.")
-    c.drawString(16 * mm, 25 * mm, "Quote your booking reference with every payment.")
+    c.drawString(16 * mm, 28 * mm, "Pay by Wave, Afrimoney, QMoney, bank transfer or cash at reception.")
+    c.drawString(16 * mm, 23 * mm, "Quote your booking reference with every payment. Scan the code for your live bill.")
+    if title == "GUEST BILL":
+        c.drawString(16 * mm, 16 * mm, "Guest signature: ______________________________")
+    pg.footer()
     c.showPage()
     c.save()
     return buf.getvalue()

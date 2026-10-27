@@ -43,6 +43,11 @@
       <div class="d-flex justify-content-between py-2 border-bottom"><span>{{ m.label }} <span class="ks-small ks-muted">{{ m.n }}×</span></span><strong>{{ m.total|money }}</strong></div>
       {% empty %}<div class="ks-empty">No payments in this period.</div>{% endfor %}
       <a href="{% url 'dashboard:till' %}" class="btn btn-sm btn-ghost mt-3"><i class="bi bi-safe"></i> Till closes</a>
+      <div class="ks-card-title mt-4 mb-1"><span>Extras charged to rooms</span><strong>{{ extras_total|money }}</strong></div>
+      {% for e in extras %}
+      <div class="ks-hbar in"><i class="bi bi-{{ e.icon }}"></i><span>{{ e.label }} <span class="ks-small ks-muted">{{ e.n }}×</span></span><strong>{{ e.total|money }}</strong><div class="track"><span style="width: {{ e.pct }}%"></span></div></div>
+      {% empty %}<div class="ks-small ks-muted">No room charges in this period.</div>{% endfor %}
+      {% if extras %}<p class="ks-small ks-muted mt-2 mb-0">Already counted in money in once guests pay their bill.</p>{% endif %}
     </div>
   </div>
 

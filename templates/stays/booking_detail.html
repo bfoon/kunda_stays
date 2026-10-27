@@ -39,7 +39,7 @@
     <div class="col-lg-7" id="pay">
       <div class="ks-card mb-4">
         <div class="ks-card-title"><span>Payment</span><span class="ks-pill {{ b.payment_state|pill }}">{% if b.payment_state == 'paid' %}Fully paid{% elif b.payment_state == 'partial' %}Part paid{% else %}Not paid yet{% endif %}</span></div>
-        <div class="d-flex justify-content-between ks-small mb-1"><span>Paid {{ b.amount_paid|money }}</span><span>Total {{ b.total_amount|money }}</span></div>
+        <div class="d-flex justify-content-between ks-small mb-1"><span>Paid {{ b.amount_paid|money }}</span><span>Total {{ b.grand_total|money }}</span></div>
         <div class="ks-progress mb-3"><div style="width: {{ b.paid_percent }}%"></div></div>
         <div class="row g-3 text-center mb-2">
           <div class="col-4"><small class="ks-muted d-block">Deposit</small><strong>{{ b.deposit_required|money }}</strong></div>
@@ -47,7 +47,7 @@
           <div class="col-4"><small class="ks-muted d-block">Balance</small><strong class="{% if b.balance %}text-danger{% endif %}">{{ b.balance|money }}</strong></div>
         </div>
 
-        {% if b.is_active and b.balance > 0 %}
+        {% if b.can_pay_online %}
         <hr>
         {% for p in b.pending_payments %}<div class="alert alert-light border ks-small"><i class="bi bi-hourglass-split"></i> We're checking your {{ p.get_method_display }} payment of <strong>{{ p.amount|money }}</strong>{% if p.reference %} (ref {{ p.reference }}){% endif %}. Your receipt will arrive on WhatsApp.</div>{% endfor %}
         <h3 class="h6 fw-bold">1. Send money to one of these</h3>
@@ -70,7 +70,7 @@
       </div>
 
       <div class="ks-card">
-        <div class="ks-card-title"><span>Payments &amp; receipts</span><a class="btn btn-sm btn-ghost" href="{% url 'stays:statement' b.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Statement</a></div>
+        <div class="ks-card-title"><span>Payments &amp; receipts</span><a class="btn btn-sm btn-ghost" href="{% url 'stays:statement' b.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> {% if b.status == 'checked_in' or b.status == 'checked_out' %}Bill{% else %}Statement{% endif %}</a></div>
         {% if payments %}
         <div class="table-responsive"><table class="ks-table">
           <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Status</th><th></th></tr></thead>
@@ -93,9 +93,38 @@
           <div class="ks-quote-row"><span>{{ b.nights }} night{{ b.nights|pluralize }} · {{ b.get_rate_plan_display|lower }}</span><span>{{ b.subtotal|money }}</span></div>
           {% if b.cleaning_fee %}<div class="ks-quote-row"><span>Cleaning fee</span><span>{{ b.cleaning_fee|money }}</span></div>{% endif %}
           {% if b.discount %}<div class="ks-quote-row text-success"><span>Discount</span><span>− {{ b.discount|money }}</span></div>{% endif %}
-          <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.total_amount|money }}</span></div>
+          {% if tab.charges %}<div class="ks-quote-row"><span>Room charges</span><span>{{ b.extras_total|money }}</span></div>{% endif %}
+          <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.grand_total|money }}</span></div>
         </div>
       </div>
+
+      {% if tab.charges %}
+      <div class="ks-card mb-4">
+        <div class="ks-card-title"><span><i class="bi bi-receipt-cutoff me-1"></i> Your room tab</span><strong>{{ tab.total|money }}</strong></div>
+        {% for d in tab.days %}
+        <div class="ks-tab-day"><span>{{ d.day|date:"D j M" }}</span><span>{{ d.total|money }}</span></div>
+        {% for c in d.grouped %}<div class="ks-tab-line"><i class="bi bi-{{ c.icon }}"></i><span>{% if c.quantity > 1 %}{{ c.quantity }} × {% endif %}{{ c.description }}</span><span>{{ c.amount|money }}</span></div>{% endfor %}
+        {% endfor %}
+        <p class="ks-small ks-muted mt-2 mb-0">Something not right? Message reception before you check out.</p>
+      </div>
+      {% endif %}
+
+      {% if menu %}
+      <div class="ks-card mb-4" data-guest-order data-wa="{{ order_wa }}" data-ref="{{ b.reference }}" data-apt="{{ b.apartment.number }}">
+        <div class="ks-card-title"><span><i class="bi bi-bell me-1"></i> Order to your apartment</span></div>
+        <p class="ks-small ks-muted mt-n2">Pick what you'd like and send the order to reception on WhatsApp. It's added to your room tab — pay any time before you leave.</p>
+        {% for g in menu %}
+        <div class="ks-small fw-semibold ks-muted mt-3 mb-1"><i class="bi bi-{{ g.icon }}"></i> {{ g.label }}</div>
+        {% for i in g.items %}
+        <div class="ks-order-row" data-name="{{ i.name }}" data-price="{{ i.price|floatformat:'2u' }}">
+          <span>{% if i.emoji %}{{ i.emoji }} {% endif %}{{ i.name }}<small class="d-block ks-muted">{% if i.price %}{{ i.price|money }}{% if i.unit %} / {{ i.unit }}{% endif %}{% else %}Free{% endif %}</small></span>
+          <div class="ks-stepper ks-stepper--sm"><button type="button" data-step="-1" aria-label="One fewer {{ i.name }}">−</button><output>0</output><button type="button" data-step="1" aria-label="One more {{ i.name }}">+</button></div>
+        </div>
+        {% endfor %}{% endfor %}
+        <textarea class="form-control mt-3" rows="2" data-order-note placeholder="Anything else? e.g. dinner at 20:00, no chilli"></textarea>
+        <a class="btn btn-wa w-100 mt-3 disabled" data-order-send href="#" target="_blank" rel="noopener" aria-disabled="true"><i class="bi bi-whatsapp me-1"></i> <span data-order-label>Choose something to order</span></a>
+      </div>
+      {% endif %}
       <div class="ks-card mb-4">
         <div class="ks-card-title">Need anything?</div>
         <div class="d-grid gap-2">

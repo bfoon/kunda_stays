@@ -365,10 +365,18 @@ class BookingDetailView(StaffMixin, View):
         )
 
     def get(self, request, pk):
+        from stays.models import ExtraItem
+        from stays.services import can_void, tab_summary
+
         b = self._get(pk)
+        tab = tab_summary(b)
+        for c in tab["charges"]:
+            c.voidable = can_void(c, request.user)
         return render(request, "dashboard/booking_detail.html", {
             "b": b, "methods": Payment.METHOD_CHOICES, "kinds": Payment.KIND_CHOICES,
             "history": b.guest.bookings.exclude(pk=b.pk).select_related("apartment")[:5],
+            "tab": tab, "voided": b.charges.filter(voided_at__isnull=False).select_related("voided_by"),
+            "extra_items": ExtraItem.objects.filter(is_active=True), "extra_categories": ExtraItem.CATEGORY_CHOICES,
         })
 
     def post(self, request, pk):
@@ -433,6 +441,7 @@ class BookingDetailView(StaffMixin, View):
             texts = {
                 "confirmation": messages_text.confirmation, "reminder": messages_text.payment_reminder,
                 "checkin": messages_text.checkin_reminder, "received": messages_text.booking_received,
+                "bill": messages_text.room_bill,
             }
             body = p.get("body", "").strip() if kind == "custom" else texts.get(kind, messages_text.confirmation)(b)
             if body:
@@ -441,6 +450,30 @@ class BookingDetailView(StaffMixin, View):
                     messages.info(request, "Message ready — tap “Open WhatsApp” in the message list to send it.")
                 else:
                     messages.success(request, f"WhatsApp {log.get_status_display().lower()}.")
+        elif a == "add_charge":
+            from stays.models import ExtraItem
+            from stays.services import post_charges
+
+            qty = parse_int(p.get("quantity"), 1, 1, 99)
+            item = ExtraItem.objects.filter(pk=p.get("item"), is_active=True).first() if p.get("item") else None
+            line = {"item": item, "quantity": qty}
+            if item is None:
+                line.update(description=p.get("description", ""), unit_price=parse_decimal(p.get("unit_price")),
+                            category=p.get("category") if p.get("category") in dict(ExtraItem.CATEGORY_CHOICES) else "other")
+            try:
+                created = post_charges(b, [line], request.user, source="desk", note=p.get("note", ""))
+                messages.success(request, f"Added {qty} × {created[0].description} to the tab.")
+            except BookingError as exc:
+                messages.error(request, str(exc))
+        elif a == "void_charge":
+            from stays.services import void_charge
+
+            charge = get_object_or_404(b.charges, pk=p.get("charge"))
+            try:
+                void_charge(charge, request.user, p.get("reason"))
+                messages.info(request, f"Voided {charge.quantity} × {charge.description}.")
+            except BookingError as exc:
+                messages.error(request, str(exc))
         elif a == "mark_sent":
             MessageLog.objects.filter(pk=p.get("message"), booking=b).update(status="sent")
         elif a == "notes":
@@ -591,10 +624,10 @@ class ReportsView(StaffMixin, View):
             resp = HttpResponse(content_type="text/csv")
             resp["Content-Disposition"] = f'attachment; filename="bookings-{start}-{end_incl}.csv"'
             w = csv.writer(resp)
-            w.writerow(["Reference", "Apartment", "Guest", "Phone", "Check-in", "Check-out", "Nights", "Status", "Source", "Total", "Paid", "Balance"])
+            w.writerow(["Reference", "Apartment", "Guest", "Phone", "Check-in", "Check-out", "Nights", "Status", "Source", "Accommodation", "Room charges", "Total", "Paid", "Balance"])
             for b in bookings:
                 w.writerow([b.reference, b.apartment.number, b.guest.full_name, b.guest.phone, b.check_in, b.check_out, b.nights,
-                            b.get_status_display(), b.get_source_display(), b.total_amount, b.amount_paid, b.balance])
+                            b.get_status_display(), b.get_source_display(), b.total_amount, b.extras_total, b.grand_total, b.amount_paid, b.balance])
             return resp
 
         per_apt = {a.id: {"apt": a, "nights": 0, "room_rev": ZERO, "collected": ZERO} for a in apartments}

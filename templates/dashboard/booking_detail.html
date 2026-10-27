@@ -6,7 +6,7 @@
 {% if b.status == 'pending' %}<form method="post">{% csrf_token %}<button name="action" value="confirm" class="btn btn-ghost"><i class="bi bi-check2-circle"></i> Confirm without deposit</button></form>{% endif %}
 {% if b.status == 'pending' or b.status == 'confirmed' %}<form method="post">{% csrf_token %}<button name="action" value="check_in" class="btn btn-ks"><i class="bi bi-box-arrow-in-right"></i> Check in</button></form>{% endif %}
 {% if b.status == 'checked_in' %}<form method="post">{% csrf_token %}<button name="action" value="check_out" class="btn btn-ks"><i class="bi bi-box-arrow-right"></i> Check out</button></form>{% endif %}
-<a href="{% url 'stays:statement' b.pk %}" target="_blank" class="btn btn-ghost"><i class="bi bi-file-earmark-pdf"></i> Statement</a>
+<a href="{% url 'stays:statement' b.pk %}" target="_blank" class="btn btn-ghost"><i class="bi bi-file-earmark-pdf"></i> {% if b.status == 'checked_in' or b.status == 'checked_out' %}Final bill{% else %}Statement{% endif %}</a>
 <a href="{{ b.get_absolute_url }}" target="_blank" class="btn btn-ghost"><i class="bi bi-box-arrow-up-right"></i> Guest page</a>
 {% endblock %}
 {% block content %}
@@ -30,7 +30,7 @@
     </div>
 
     <div class="ks-card">
-      <div class="ks-card-title"><span>Payments</span><span class="ks-pill {{ b.payment_state|pill }}">{{ b.amount_paid|money }} of {{ b.total_amount|money }}</span></div>
+      <div class="ks-card-title"><span>Payments</span><span class="ks-pill {{ b.payment_state|pill }}">{{ b.amount_paid|money }} of {{ b.grand_total|money }}</span></div>
       <div class="ks-progress mb-3"><div style="width: {{ b.paid_percent }}%"></div></div>
       <div class="table-responsive"><table class="ks-table mb-3">
         <thead><tr><th>Date</th><th>Type</th><th>Method / ref</th><th class="text-end">Amount</th><th>Status</th><th></th></tr></thead>
@@ -64,6 +64,60 @@
       {% endif %}
     </div>
 
+    <div class="ks-card" id="tab">
+      <div class="ks-card-title">
+        <span><i class="bi bi-receipt-cutoff me-1"></i> Room tab {% if tab.charges %}<span class="ks-pill ks-pill--river">{{ tab.charges|length }} item{{ tab.charges|length|pluralize }}</span>{% endif %}</span>
+        <span class="d-flex gap-1">
+          {% if b.accepts_charges %}<a href="{% url 'dashboard:charges' %}?booking={{ b.pk }}" class="btn btn-sm btn-ks"><i class="bi bi-plus-square"></i> Charge screen</a>{% endif %}
+          <a href="{% url 'stays:statement' b.pk %}" target="_blank" class="btn btn-sm btn-ghost"><i class="bi bi-file-earmark-pdf"></i> Bill</a>
+        </span>
+      </div>
+      {% if tab.charges %}
+      <div class="row g-4">
+        <div class="col-md-8">
+          {% for d in tab.days %}
+          <div class="ks-tab-day"><span>{{ d.day|date:"l j M" }}</span><span>{{ d.total|money }}</span></div>
+          {% for c in d.lines %}
+          <div class="ks-tab-line"><i class="bi bi-{{ c.icon }}"></i>
+            <span>{% if c.quantity > 1 %}{{ c.quantity }} × {% endif %}{{ c.description }}<small class="d-block ks-muted">{% if c.quantity > 1 %}{{ c.unit_price|money }} each · {% endif %}{{ c.get_source_display }} · {{ c.created_at|time:"H:i" }}{% if c.posted_by %} · {{ c.posted_by.first_name|default:c.posted_by.username }}{% endif %}{% if c.note %} · “{{ c.note }}”{% endif %}</small></span>
+            <span>{{ c.amount|money }}</span>
+            {% if c.voidable %}<details class="ks-void"><summary aria-label="Void {{ c.description }}"><i class="bi bi-x-circle"></i></summary>
+              <form method="post" class="ks-void-pop">{% csrf_token %}<input type="hidden" name="action" value="void_charge"><input type="hidden" name="charge" value="{{ c.pk }}"><input name="reason" class="form-control form-control-sm" placeholder="Why? e.g. wrong room, comped" required><button class="btn btn-sm btn-ghost text-danger">Void</button></form></details>{% endif %}
+          </div>
+          {% endfor %}{% endfor %}
+        </div>
+        <div class="col-md-4">
+          <div class="ks-small fw-semibold mb-2">By type</div>
+          {% for label, total in tab.by_category %}<div class="d-flex justify-content-between ks-small py-1 border-bottom"><span>{{ label }}</span><strong>{{ total|money }}</strong></div>{% endfor %}
+          <div class="d-flex justify-content-between pt-2 fw-bold"><span>Tab total</span><span>{{ tab.total|money }}</span></div>
+        </div>
+      </div>
+      {% else %}
+      <div class="ks-empty py-3">Nothing charged to this room yet.{% if not b.accepts_charges %} Charges can be added while the guest is in, and up to two days after check-out.{% endif %}</div>
+      {% endif %}
+      {% if voided %}
+      <details class="mt-3"><summary class="ks-small ks-muted">{{ voided|length }} voided charge{{ voided|length|pluralize }}</summary>
+        {% for c in voided %}<div class="ks-tab-line is-void"><i class="bi bi-{{ c.icon }}"></i><span>{% if c.quantity > 1 %}{{ c.quantity }} × {% endif %}{{ c.description }}<small class="d-block">Voided by {{ c.voided_by.first_name|default:c.voided_by.username }} {{ c.voided_at|date:"j M H:i" }} — {{ c.void_reason }}</small></span><span>{{ c.amount|money }}</span></div>{% endfor %}
+      </details>
+      {% endif %}
+      {% if b.accepts_charges %}
+      <form method="post" class="row g-2 align-items-end p-3 rounded-3 mt-3" style="background:var(--ks-mist)" data-quick-charge>
+        {% csrf_token %}<input type="hidden" name="action" value="add_charge">
+        <div class="col-md-5"><label class="form-label" for="qc-item">Add to tab</label>
+          <select id="qc-item" name="item" class="form-select">
+            {% regroup extra_items by get_category_display as grouped %}
+            {% for g in grouped %}<optgroup label="{{ g.grouper }}">{% for i in g.list %}<option value="{{ i.pk }}" {% if i.sold_out %}disabled{% endif %}>{{ i.name }} — {{ i.price|money }}{% if i.sold_out %} (sold out){% endif %}</option>{% endfor %}</optgroup>{% endfor %}
+            <option value="">Something else…</option>
+          </select></div>
+        <div class="col-3 col-md-2"><label class="form-label" for="qc-qty">Qty</label><input id="qc-qty" type="number" min="1" max="99" name="quantity" value="1" class="form-control"></div>
+        <div class="col-9 col-md-3 d-none" data-custom><label class="form-label" for="qc-desc">Description</label><input id="qc-desc" name="description" class="form-control" maxlength="120"></div>
+        <div class="col-6 col-md-2 d-none" data-custom><label class="form-label" for="qc-price">Price</label><input id="qc-price" type="number" step="0.01" min="0" name="unit_price" class="form-control"></div>
+        <div class="col-6 col-md-3 d-none" data-custom><label class="form-label" for="qc-cat">Type</label><select id="qc-cat" name="category" class="form-select">{% for v, l in extra_categories %}<option value="{{ v }}" {% if v == 'other' %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-md-2 d-grid"><button class="btn btn-ks">Add</button></div>
+      </form>
+      {% endif %}
+    </div>
+
     <div class="ks-card">
       <div class="ks-card-title"><span><i class="bi bi-whatsapp text-success"></i> WhatsApp</span></div>
       <form method="post" class="d-flex flex-wrap gap-2 mb-3">
@@ -71,6 +125,7 @@
         <button name="kind" value="confirmation" class="btn btn-sm btn-ghost">Booking confirmation</button>
         <button name="kind" value="reminder" class="btn btn-sm btn-ghost" {% if not b.balance %}disabled{% endif %}>Payment reminder</button>
         <button name="kind" value="checkin" class="btn btn-sm btn-ghost">Arrival details &amp; map</button>
+        <button name="kind" value="bill" class="btn btn-sm btn-ghost"><i class="bi bi-receipt"></i> Itemized bill</button>
       </form>
       <form method="post" class="d-flex gap-2 mb-3">
         {% csrf_token %}<input type="hidden" name="action" value="send"><input type="hidden" name="kind" value="custom">
@@ -108,9 +163,12 @@
         <div class="ks-quote-row"><span>{{ b.nights }} nights · {{ b.get_rate_plan_display|lower }}</span><span>{{ b.subtotal|money }}</span></div>
         <div class="ks-quote-row"><span>Cleaning</span><span>{{ b.cleaning_fee|money }}</span></div>
         {% if b.discount %}<div class="ks-quote-row text-success"><span>Discount</span><span>− {{ b.discount|money }}</span></div>{% endif %}
-        <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.total_amount|money }}</span></div>
+        <div class="ks-quote-row"><span>Accommodation</span><span>{{ b.total_amount|money }}</span></div>
+        {% if b.extras_total %}<div class="ks-quote-row"><span><a href="#tab">Room charges</a></span><span>{{ b.extras_total|money }}</span></div>{% endif %}
+        <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.grand_total|money }}</span></div>
         <div class="ks-quote-row"><span>Deposit required</span><span>{{ b.deposit_required|money }}</span></div>
         <div class="ks-quote-row fw-bold {% if b.balance %}text-danger{% endif %}"><span>Balance</span><span>{{ b.balance|money }}</span></div>
+        {% if b.credit %}<div class="ks-quote-row text-success"><span>Credit to refund</span><span>{{ b.credit|money }}</span></div>{% endif %}
       </div>
     </div>
 

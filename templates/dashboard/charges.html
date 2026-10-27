@@ -1,0 +1,122 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Charge to room{% endblock %}
+{% block heading %}Charge to room{% endblock %}
+{% block actions %}
+{% if 'property' in portal.sections %}<a href="{% url 'dashboard:extras_menu' %}" class="btn btn-ghost"><i class="bi bi-card-list"></i> Extras menu</a>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="ks-pos-stats">
+  <span><i class="bi bi-receipt"></i> Today <strong>{{ stats.total|default:0|money }}</strong></span>
+  <span><i class="bi bi-basket"></i> <strong>{{ stats.n|default:0 }}</strong> item{{ stats.n|default:0|pluralize }} charged</span>
+  {% if top %}<span><i class="bi bi-trophy"></i> Top seller <strong>{{ top.description }}</strong> × {{ top.q }}</span>{% endif %}
+  {% for i in low %}<span class="warn"><i class="bi bi-exclamation-triangle"></i> {{ i.name }}: {% if i.sold_out %}sold out{% else %}{{ i.stock }} left{% endif %}</span>{% endfor %}
+</div>
+
+<form method="post" data-pos class="row g-4">
+  {% csrf_token %}
+  <input type="hidden" name="ticket" value="[]">
+  <div class="col-xl-8 d-grid gap-4 align-content-start">
+    <section class="ks-card" aria-labelledby="pick-room">
+      <div class="ks-card-title"><span id="pick-room"><span class="ks-step-no">1</span> Which room?</span></div>
+      {% if in_house or arriving or recent %}
+      <div class="ks-rooms" role="radiogroup" aria-label="Room">
+        {% for b in in_house %}{% include "dashboard/_room_chip.html" with tag="" %}{% endfor %}
+        {% for b in arriving %}{% include "dashboard/_room_chip.html" with tag="Arriving today" %}{% endfor %}
+        {% for b in recent %}{% include "dashboard/_room_chip.html" with tag="late" %}{% endfor %}
+      </div>
+      {% if recent %}<p class="ks-small ks-muted mt-2 mb-0">Guests who left in the last two days stay listed for late charges, such as minibar found after check-out.</p>{% endif %}
+      {% else %}
+      <div class="ks-empty">No guests in house right now. Rooms appear here once a guest is checked in.</div>
+      {% endif %}
+    </section>
+
+    <section class="ks-card" aria-labelledby="pick-items">
+      <div class="ks-card-title"><span id="pick-items"><span class="ks-step-no">2</span> What did they have?</span></div>
+      {% if cats %}
+      <div class="ks-period mb-3" role="tablist">
+        <a href="#" class="on" data-cat="all" role="tab">All</a>
+        {% for c in cats %}<a href="#" data-cat="{{ c.key }}" role="tab"><i class="bi bi-{{ c.icon }}"></i> {{ c.label }}</a>{% endfor %}
+      </div>
+      <div class="ks-tiles">
+        {% for c in cats %}{% for i in c.items %}
+        <button type="button" class="ks-tile {% if i.sold_out %}is-out{% endif %}" data-item="{{ i.pk }}" data-name="{{ i.name }}" data-price="{{ i.price|floatformat:'2u' }}" data-cat="{{ i.category }}" {% if i.stock is not None %}data-stock="{{ i.stock }}"{% endif %} {% if i.sold_out %}disabled{% endif %}>
+          <span class="em">{% if i.emoji %}{{ i.emoji }}{% else %}<i class="bi bi-{{ i.icon }}"></i>{% endif %}</span>
+          <span class="nm">{{ i.name }}</span>
+          <span class="pr">{% if i.price %}{{ i.price|money }}{% if i.unit %}<small> / {{ i.unit }}</small>{% endif %}{% else %}Free{% endif %}</span>
+          {% if i.stock is not None %}<span class="st {% if i.low_stock %}low{% endif %}">{% if i.sold_out %}Sold out{% else %}{{ i.stock }} left{% endif %}</span>{% endif %}
+          <span class="qty" aria-hidden="true"></span>
+        </button>
+        {% endfor %}{% endfor %}
+      </div>
+      {% else %}
+      <div class="ks-empty">The extras menu is empty. {% if 'property' in portal.sections %}<a href="{% url 'dashboard:extras_menu' %}">Add drinks, meals and services</a>.{% else %}Ask a manager to add items.{% endif %}</div>
+      {% endif %}
+      <details class="ks-custom mt-3">
+        <summary><i class="bi bi-plus-circle"></i> Something not on the menu</summary>
+        <div class="row g-2 mt-1 align-items-end">
+          <div class="col-md-5"><label class="form-label" for="c-desc">Description</label><input id="c-desc" class="form-control" placeholder="e.g. Broken glass, taxi to Serrekunda" maxlength="120"></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="c-price">Price</label><input id="c-price" type="number" step="0.01" min="0" class="form-control"></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="c-cat">Type</label><select id="c-cat" class="form-select">{% for v, l in categories %}<option value="{{ v }}" {% if v == 'other' %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+          <div class="col-md-3 d-grid"><button type="button" class="btn btn-ghost" data-add-custom><i class="bi bi-plus"></i> Add to ticket</button></div>
+        </div>
+      </details>
+    </section>
+
+    {% if feed %}
+    <section class="ks-card">
+      <div class="ks-card-title"><span>Charged today</span></div>
+      {% for c in feed %}
+      <div class="ks-feed {% if c.is_void %}is-void{% endif %}">
+        <time>{{ c.created_at|time:"H:i" }}</time>
+        <span class="ks-plaque position-static">{{ c.booking.apartment.number }}</span>
+        <span>{% if c.quantity > 1 %}{{ c.quantity }} × {% endif %}{{ c.description }}<small class="d-block ks-muted">{{ c.get_source_display }} · {{ c.posted_by.first_name|default:c.posted_by.username|default:"Guest" }}{% if c.is_void %} · voided: {{ c.void_reason }}{% endif %}</small></span>
+        <strong>{{ c.amount|money }}</strong>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="col-xl-4">
+    <div class="ks-pos-side">
+      <div class="ks-receipt" id="ticket" aria-live="polite">
+        <div class="ks-receipt-head">
+          <span class="ks-step-no">3</span>
+          <div><strong data-ticket-room>{% if selected %}Apt {{ selected.apartment.number }} · {{ selected.guest.first_name }}{% else %}Pick a room{% endif %}</strong><small class="d-block">{% now "D j M · H:i" %}</small></div>
+        </div>
+        <ul class="ks-receipt-lines" data-lines><li class="ks-receipt-empty">Tap items to add them.</li></ul>
+        <div class="ks-receipt-total"><span>Total</span><strong data-total>{{ site.currency_symbol }} 0</strong></div>
+        <div class="row g-2 mt-1">
+          <div class="col-6"><label class="form-label ks-small" for="source">Where from</label><select id="source" name="source" class="form-select form-select-sm">{% for v, l in sources %}{% if v != 'guest' %}<option value="{{ v }}" {% if v == default_source %}selected{% endif %}>{{ l }}</option>{% endif %}{% endfor %}<option value="guest">Guest order (WhatsApp)</option></select></div>
+          <div class="col-6"><label class="form-label ks-small" for="note">Note</label><input id="note" name="note" class="form-control form-control-sm" placeholder="Optional" maxlength="200"></div>
+        </div>
+        <input type="hidden" name="booking" value="{{ selected.pk|default:'' }}">
+        <button class="btn btn-ks btn-lg w-100 mt-3" data-submit disabled><i class="bi bi-plus-square"></i> <span data-submit-label>Charge to room</span></button>
+      </div>
+
+      {% if selected %}
+      <div class="ks-card mt-3">
+        <div class="ks-card-title"><span>Apt {{ selected.apartment.number }} tab</span><strong>{{ tab.total|money }}</strong></div>
+        <div class="ks-small ks-muted mb-2">{{ selected.guest.full_name }} · room {{ selected.total_amount|money }} · owes {{ selected.balance|money }}</div>
+        {% for d in tab.days %}
+        <div class="ks-tab-day"><span>{{ d.day|date:"D j M" }}</span><span>{{ d.total|money }}</span></div>
+        {% for c in d.lines %}
+        <div class="ks-tab-line"><i class="bi bi-{{ c.icon }}"></i><span>{% if c.quantity > 1 %}{{ c.quantity }} × {% endif %}{{ c.description }}</span><span>{{ c.amount|money }}</span>
+          {% if c.voidable %}<details class="ks-void"><summary aria-label="Void {{ c.description }}"><i class="bi bi-x-circle"></i></summary>
+            <div class="ks-void-pop"><input form="void-{{ c.pk }}" name="reason" class="form-control form-control-sm" placeholder="Why? e.g. wrong room" required><button form="void-{{ c.pk }}" class="btn btn-sm btn-ghost text-danger">Void</button></div></details>{% endif %}
+        </div>
+        {% endfor %}{% empty %}<div class="ks-empty py-3">Nothing on the tab yet.</div>{% endfor %}
+        {% if 'front' in portal.sections or 'payments' in portal.sections %}<a href="{% url 'dashboard:booking' selected.pk %}" class="btn btn-sm btn-ghost mt-2"><i class="bi bi-journal-bookmark"></i> Booking &amp; bill</a>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+{% if tab %}{% for c in tab.charges %}{% if c.voidable %}<form method="post" id="void-{{ c.pk }}" class="d-none">{% csrf_token %}<input type="hidden" name="action" value="void"><input type="hidden" name="charge" value="{{ c.pk }}"></form>{% endif %}{% endfor %}{% endif %}
+
+<div class="ks-ticket-bar d-xl-none" data-ticket-bar hidden>
+  <span class="text-nowrap"><strong data-bar-count>0</strong> · <strong data-bar-total></strong></span>
+  <a href="#ticket" class="btn btn-sun">Review &amp; charge</a>
+</div>
+{% endblock %}

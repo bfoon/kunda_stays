@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import accounts, finance, operations, pricing, views
+from . import accounts, charges, finance, operations, pricing, views
 
 app_name = "dashboard"
 
@@ -21,6 +21,8 @@ urlpatterns = [
     path("messages/", views.MessagesView.as_view(), name="messages"),
     # Operations portal
     path("rates/", pricing.RatesView.as_view(), name="rates"),
+    path("charges/", charges.ChargeToRoomView.as_view(), name="charges"),
+    path("charges/menu/", charges.ExtrasMenuView.as_view(), name="extras_menu"),
     path("finance/", finance.FinanceView.as_view(), name="finance"),
     path("finance/expenses/", finance.ExpensesView.as_view(), name="expenses"),
     path("finance/till/", finance.TillView.as_view(), name="till"),

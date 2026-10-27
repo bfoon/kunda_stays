@@ -77,6 +77,24 @@ guests, bookings, payments and a maintenance ticket. Set it to `0` for productio
 - Staff & roles (one-time readable passwords), Logbook (automatic audit trail via signals), My account,
   Ctrl+K / “/” search across pages, bookings and guests, photo drag-to-reorder with captions and a listing score
 
+**Room charges (the guest's tab)**
+- *Charge to room*: tap the guest's room, tap items (drinks, food, minibar, laundry, transport, services,
+  damages) or add a custom line, review the receipt-style ticket and post. Phone-friendly with a sticky total bar.
+  Open to front desk, finance, housekeeping and managers; housekeeping cards link straight to a room's minibar
+- *Extras menu* (managers): prices, units, emoji, optional stock with low-stock warnings and restock, and whether
+  guests may order the item themselves. `python manage.py seed_extras` loads a starter menu (safe to re-run)
+- Booking page: itemized tab by day, breakdown by type, quick-add, voided lines kept on record
+- Charges are never deleted: voids need a reason, are logged, and are allowed for the poster within 30 minutes or
+  for finance/managers afterwards. Stock is taken under a row lock and returned on void. Cancelled/pending
+  bookings can't take charges; checked-out guests can for two days (late minibar, damages)
+- `Booking.total_amount` stays the accommodation price; `extras_total` is kept in sync and `grand_total` /
+  `balance` include it, so reminders, receipts, the Today page, Reports CSV and Finance all include extras
+- Final bill PDF ("Guest bill" once arrived): accommodation, room charges by day (identical lines merged as
+  "6 × Coffee"), payments, balance, signature line, multi-page for long stays. Itemized bill on WhatsApp too
+- Guest booking page shows the running tab and, while in house, an "Order to your apartment" menu that sends an
+  itemized order to reception on WhatsApp (staff post it — nothing is charged automatically). Guests who leave
+  owing room charges can still pay online
+
 With `SEED_DEMO=1` you also get staff `awa` (front desk), `musa` (finance), `binta` (housekeeping) and
 `ida` (manager), password `DEMO_STAFF_PASSWORD` (default `kunda-demo-2026`), plus starter price rules,
 six months of expenses and a till close. **Change or delete these accounts before going live.**

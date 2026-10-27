@@ -27,6 +27,10 @@
     <a class="link {% if u == 'guests' or u == 'guest' %}active{% endif %}" href="{% url 'dashboard:guests' %}"><i class="bi bi-people"></i> Guests</a>
     <a class="link {% if u == 'messages' %}active{% endif %}" href="{% url 'dashboard:messages' %}"><i class="bi bi-whatsapp"></i> Messages</a>
     {% endif %}
+    {% if 'charges' in s %}
+    {% if 'front' not in s %}<div class="ks-side-group">Room service</div>{% endif %}
+    <a class="link {% if u == 'charges' %}active{% endif %}" href="{% url 'dashboard:charges' %}"><i class="bi bi-plus-square"></i> Charge to room</a>
+    {% endif %}
 
     {% if 'payments' in s or 'till' in s or 'finance' in s or 'reports' in s %}
     <div class="ks-side-group">Money</div>
@@ -46,6 +50,7 @@
     {% if 'property' in s %}
     <a class="link {% if u == 'apartments' or u == 'apartment_edit' or u == 'apartment_new' %}active{% endif %}" href="{% url 'dashboard:apartments' %}"><i class="bi bi-building"></i> Apartments &amp; photos</a>
     <a class="link {% if u == 'rates' %}active{% endif %}" href="{% url 'dashboard:rates' %}"><i class="bi bi-tags"></i> Rates &amp; pricing</a>
+    <a class="link {% if u == 'extras_menu' %}active{% endif %}" href="{% url 'dashboard:extras_menu' %}"><i class="bi bi-card-list"></i> Extras menu</a>
     <a class="link {% if u == 'property' %}active{% endif %}" href="{% url 'dashboard:property' %}"><i class="bi bi-info-circle"></i> Property profile</a>
     {% endif %}
     {% endif %}

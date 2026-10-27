@@ -11,7 +11,7 @@ HOUSEKEEPING = "Housekeeping"
 
 ALL_SECTIONS = {
     "today", "front", "payments", "till", "finance", "reports", "property", "maintenance",
-    "housekeeping", "staff", "logbook",
+    "housekeeping", "staff", "logbook", "charges",
 }
 
 ROLES = {
@@ -22,21 +22,21 @@ ROLES = {
         "icon": "key",
     },
     FRONT_DESK: {
-        "sections": {"today", "front", "payments", "till", "housekeeping", "maintenance"},
+        "sections": {"today", "front", "payments", "till", "housekeeping", "maintenance", "charges"},
         "home": "dashboard:home",
-        "summary": "Bookings, check-in/out, guests, taking payments and closing their own till.",
+        "summary": "Bookings, check-in/out, guests, room charges, taking payments and closing their own till.",
         "icon": "person-badge",
     },
     FINANCE: {
-        "sections": {"today", "payments", "till", "finance", "reports", "logbook"},
+        "sections": {"today", "payments", "till", "finance", "reports", "logbook", "charges"},
         "home": "dashboard:finance",
         "summary": "Payments, expenses, profit & loss, till reviews, reports and the logbook.",
         "icon": "calculator",
     },
     HOUSEKEEPING: {
-        "sections": {"housekeeping", "maintenance"},
+        "sections": {"housekeeping", "maintenance", "charges"},
         "home": "dashboard:housekeeping",
-        "summary": "The housekeeping board and maintenance tickets — works well on a phone.",
+        "summary": "The housekeeping board, minibar charges and maintenance tickets — works well on a phone.",
         "icon": "stars",
     },
 }

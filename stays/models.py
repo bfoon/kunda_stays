@@ -1,5 +1,6 @@
 import secrets
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -208,7 +209,8 @@ class Booking(Base):
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO)
     cleaning_fee = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO, help_text="Accommodation total (room, cleaning, discount)")
+    extras_total = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO, help_text="Room charges on the tab (kept in sync automatically)")
     deposit_amount = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO)
     special_requests = models.TextField(blank=True)
     internal_notes = models.TextField(blank=True)
@@ -262,8 +264,33 @@ class Booking(Base):
         return total
 
     @property
+    def grand_total(self):
+        """Everything the guest owes: accommodation plus room charges."""
+        return self.total_amount + (self.extras_total or ZERO)
+
+    @property
     def balance(self):
-        return max(self.total_amount - self.amount_paid, ZERO)
+        return max(self.grand_total - self.amount_paid, ZERO)
+
+    @property
+    def credit(self):
+        """Overpayment to refund or carry over."""
+        return max(self.amount_paid - self.grand_total, ZERO)
+
+    @property
+    def accepts_charges(self):
+        """Extras can be posted while the guest is in, and for two days after they leave (late minibar, damages)."""
+        if self.status == self.CHECKED_IN or self.status == self.CONFIRMED:
+            return True
+        if self.status == self.CHECKED_OUT:
+            return self.check_out >= timezone.localdate() - timedelta(days=2)
+        return False
+
+    def recompute_extras(self):
+        total = self.charges.filter(voided_at__isnull=True).aggregate(s=models.Sum("amount"))["s"] or ZERO
+        Booking.objects.filter(pk=self.pk).update(extras_total=total)
+        self.extras_total = total
+        return total
 
     @property
     def deposit_required(self):
@@ -275,13 +302,13 @@ class Booking(Base):
 
     @property
     def paid_percent(self):
-        if not self.total_amount:
+        if not self.grand_total:
             return 0
-        return min(100, int(self.amount_paid / self.total_amount * 100))
+        return min(100, int(self.amount_paid / self.grand_total * 100))
 
     @property
     def payment_state(self):
-        if self.total_amount and self.balance <= 0:
+        if self.grand_total and self.balance <= 0:
             return "paid"
         if self.amount_paid > 0:
             return "partial"
@@ -294,6 +321,11 @@ class Booking(Base):
     @property
     def is_active(self):
         return self.status in self.ACTIVE
+
+    @property
+    def can_pay_online(self):
+        """Active bookings, and guests who left owing something (e.g. room charges)."""
+        return self.balance > 0 and (self.is_active or self.status == self.CHECKED_OUT)
 
     @property
     def can_guest_cancel(self):
@@ -386,6 +418,7 @@ class MessageLog(Base):
         ("reminder", "Payment reminder"),
         ("checkin", "Arrival reminder"),
         ("released", "Hold released"),
+        ("bill", "Room bill"),
         ("custom", "Custom message"),
     ]
 
@@ -553,6 +586,7 @@ class ActivityLog(Base):
     CATEGORY_CHOICES = [
         ("auth", "Sign-in"), ("booking", "Bookings"), ("payment", "Payments"), ("rates", "Pricing"),
         ("finance", "Finance"), ("property", "Property"), ("housekeeping", "Housekeeping"), ("staff", "Staff"),
+        ("charges", "Room charges"),
     ]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="activity")
     actor = models.CharField(max_length=80, blank=True, help_text="Shown when there is no user, e.g. Guest or System")
@@ -608,3 +642,88 @@ class PropertyProfile(models.Model):
     def get(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+# ===================== Room charges (the guest's tab) =====================
+
+class ExtraItem(Base):
+    """Something staff can charge to a room: a drink, a meal, laundry, a taxi…"""
+    CATEGORY_CHOICES = [
+        ("drinks", "Drinks"), ("food", "Food"), ("minibar", "Minibar"), ("laundry", "Laundry"),
+        ("transport", "Transport"), ("services", "Services"), ("damages", "Damages & losses"), ("other", "Other"),
+    ]
+    ICONS = {
+        "drinks": "cup-straw", "food": "egg-fried", "minibar": "box2-heart", "laundry": "basket2", "transport": "car-front",
+        "services": "bell", "damages": "exclamation-triangle", "other": "three-dots",
+    }
+
+    name = models.CharField(max_length=80)
+    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, default="drinks", db_index=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    unit = models.CharField(max_length=20, blank=True, help_text="e.g. bottle, plate, kg, trip")
+    emoji = models.CharField(max_length=4, blank=True, help_text="Shown on the tap-to-charge tile, e.g. 🍺")
+    stock = models.PositiveIntegerField(null=True, blank=True, help_text="Leave empty if you don't count stock")
+    low_stock_at = models.PositiveIntegerField(default=5)
+    is_active = models.BooleanField(default=True)
+    guest_can_order = models.BooleanField(default=True, help_text="Show on the guest's in-stay order menu")
+    sort = models.PositiveSmallIntegerField(default=100)
+
+    class Meta:
+        ordering = ["category", "sort", "name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def icon(self):
+        return self.ICONS.get(self.category, "tag")
+
+    @property
+    def tracks_stock(self):
+        return self.stock is not None
+
+    @property
+    def low_stock(self):
+        return self.stock is not None and self.stock <= self.low_stock_at
+
+    @property
+    def sold_out(self):
+        return self.stock is not None and self.stock <= 0
+
+
+class RoomCharge(Base):
+    """One line on a guest's tab. Never deleted: mistakes are voided with a reason."""
+    SOURCE_CHOICES = [
+        ("desk", "Front desk"), ("bar", "Bar / kitchen"), ("minibar", "Minibar check"), ("housekeeping", "Housekeeping"),
+        ("guest", "Guest order"), ("checkout", "Check-out"),
+    ]
+
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="charges")
+    item = models.ForeignKey(ExtraItem, on_delete=models.SET_NULL, null=True, blank=True, related_name="charges")
+    description = models.CharField(max_length=120)
+    category = models.CharField(max_length=15, choices=ExtraItem.CATEGORY_CHOICES, default="other")
+    quantity = models.PositiveSmallIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    charged_on = models.DateField(db_index=True)
+    source = models.CharField(max_length=15, choices=SOURCE_CHOICES, default="desk")
+    note = models.CharField(max_length=200, blank=True)
+    posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    void_reason = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["charged_on", "created_at"]
+        indexes = [models.Index(fields=["booking", "voided_at"])]
+
+    def __str__(self):
+        return f"{self.quantity} × {self.description}"
+
+    @property
+    def is_void(self):
+        return self.voided_at is not None
+
+    @property
+    def icon(self):
+        return ExtraItem.ICONS.get(self.category, "tag")

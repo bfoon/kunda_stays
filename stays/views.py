@@ -214,7 +214,19 @@ class BookingDetailView(View):
             ("Checked out", b.status == Booking.CHECKED_OUT),
         ]
         suggested = b.deposit_outstanding if b.deposit_outstanding > 0 else b.balance
+        from . import whatsapp
+        from .models import ExtraItem
+        from .services import tab_summary
+
+        menu = []
+        if b.status == Booking.CHECKED_IN:
+            items = [i for i in ExtraItem.objects.filter(is_active=True, guest_can_order=True) if not i.sold_out]
+            for key, label in ExtraItem.CATEGORY_CHOICES:
+                group = [i for i in items if i.category == key]
+                if group and key != "damages":
+                    menu.append({"label": label, "icon": ExtraItem.ICONS[key], "items": group})
         return render(request, "stays/booking_detail.html", {
+            "tab": tab_summary(b), "menu": menu, "order_wa": whatsapp.normalize(k["whatsapp"]),
             "b": b,
             "qr": _qr_svg(url),
             "methods": [m for m in methods if m["detail"]],
@@ -232,7 +244,7 @@ class BookingDetailView(View):
             method = request.POST.get("method", "")
             ref = request.POST.get("reference", "").strip()[:80]
             valid_methods = {m for m, _ in Payment.METHOD_CHOICES}
-            if not b.is_active:
+            if not (b.is_active or b.can_pay_online):
                 messages.error(request, "This booking is no longer active.")
             elif not amount or amount <= 0:
                 messages.error(request, "Enter the amount you sent.")

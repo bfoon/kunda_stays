@@ -10,7 +10,7 @@ from django.dispatch import receiver
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import (ActivityLog, Apartment, Booking, CashUp, Expense, Payment, PropertyProfile, RateRule)
+from .models import (ActivityLog, Apartment, Booking, CashUp, Expense, Payment, PropertyProfile, RateRule, RoomCharge)
 
 
 def log(category, summary, link="", user=None, actor=""):
@@ -152,6 +152,26 @@ def _cashup_saved(sender, instance, created, **kwargs):
         v = c.variance
         state = "balanced" if v == 0 else (f"over by {_money(v)}" if v > 0 else f"short by {_money(-v)}")
         log("finance", f"Closed the till for {c.business_date:%d %b} — counted {_money(c.counted_cash)}, {state}", reverse("dashboard:till"))
+
+
+# ---------- room charges ----------
+
+@receiver(post_init, sender=RoomCharge)
+def _charge_init(sender, instance, **kwargs):
+    instance._was_void = instance.voided_at is not None if instance.pk else None
+
+
+@receiver(post_save, sender=RoomCharge)
+def _charge_saved(sender, instance, created, **kwargs):
+    c = instance
+    link = reverse("dashboard:booking", args=[c.booking_id])
+    where = f"{c.booking.reference} · Apt {c.booking.apartment.number}"
+    if created:
+        actor = "Guest (website)" if c.source == "guest" and not c.posted_by_id else ""
+        log("charges", f"Charged {c.quantity} × {c.description} ({_money(c.amount)}) to {where}", link, actor=actor)
+    elif c.voided_at and not c._was_void:
+        log("charges", f"Voided {c.quantity} × {c.description} ({_money(c.amount)}) on {where} — {c.void_reason}", link)
+    c._was_void = c.voided_at is not None
 
 
 # ---------- sign-in ----------

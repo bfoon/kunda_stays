@@ -242,6 +242,22 @@ class Command(BaseCommand):
         Apartment.objects.filter(number__in=[apts[0].number, apts[3].number]).update(housekeeping=Apartment.HK_DIRTY, housekeeping_note="Checked out")
         Apartment.objects.filter(number=apts[5].number).update(housekeeping=Apartment.HK_CLEANING)
 
+        # Starter extras menu and a few charges on guests who are in house
+        from django.core.management import call_command
+
+        from stays.models import Booking, ExtraItem
+        from stays.services import post_charges
+
+        call_command("seed_extras", verbosity=0)
+        menu = {i.name: i for i in ExtraItem.objects.all()}
+        binta = User.objects.get(username="binta")
+        for n, b in enumerate(Booking.objects.filter(status=Booking.CHECKED_IN)[:3]):
+            picks = [("Julbrew beer", 2, "minibar", binta), ("Breakfast", 2, "bar", admin), ("Laundry", 1 + n, "housekeeping", binta)]
+            if n == 0:
+                picks.append(("Airport transfer (Banjul)", 1, "desk", admin))
+            for name, qty, src, who in picks:
+                post_charges(b, [{"item": menu[name], "quantity": qty}], who, source=src)
+
         awa = User.objects.get(username="awa")
         if not CashUp.objects.exists():
             CashUp.objects.create(business_date=today - timedelta(days=1), staff=awa, expected_cash=Decimal(4500), counted_cash=Decimal(5400),

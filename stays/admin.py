@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from .models import (ActivityLog, Amenity, Apartment, ApartmentPhoto, Booking, CashUp, ContactInquiry, Expense, Guest,
-                     MaintenanceTicket, MessageLog, Payment, PropertyProfile, RateRule)
+from .models import (ActivityLog, Amenity, Apartment, ApartmentPhoto, Booking, CashUp, ContactInquiry, Expense, ExtraItem,
+                     Guest, MaintenanceTicket, MessageLog, Payment, PropertyProfile, RateRule, RoomCharge)
 
 
 class PhotoInline(admin.TabularInline):
@@ -82,3 +82,22 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
 
 admin.site.register(PropertyProfile)
+
+
+@admin.register(ExtraItem)
+class ExtraItemAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "price", "unit", "stock", "is_active", "guest_can_order")
+    list_filter = ("category", "is_active")
+    list_editable = ("price", "stock", "is_active")
+    search_fields = ("name",)
+
+
+@admin.register(RoomCharge)
+class RoomChargeAdmin(admin.ModelAdmin):
+    list_display = ("charged_on", "booking", "quantity", "description", "amount", "source", "posted_by", "voided_at")
+    list_filter = ("category", "source", "charged_on")
+    search_fields = ("description", "booking__reference", "booking__guest__full_name")
+    readonly_fields = ("booking", "item", "amount", "posted_by", "voided_at", "voided_by")
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # void from the portal instead, so the tab stays honest

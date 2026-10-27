@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Find my booking · {{ site.name }}{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:560px">
+  <h1 class="h2">Find your booking</h1>
+  <p class="ks-muted">Enter the reference from your WhatsApp message and the phone number or email you booked with.</p>
+  <form method="post" class="ks-card d-grid gap-3">
+    {% csrf_token %}
+    <div><label class="form-label" for="reference">Booking reference</label><input id="reference" name="reference" class="form-control form-control-lg text-uppercase" placeholder="KS-XXXXXX" required></div>
+    <div><label class="form-label" for="contact">Phone or email</label><input id="contact" name="contact" class="form-control" required></div>
+    <button class="btn btn-ks btn-lg">Open my booking</button>
+  </form>
+  {% if recent %}
+  <h2 class="h5 mt-5">Booked on this device</h2>
+  <div class="list-group">{% for b in recent %}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ b.get_absolute_url }}"><span><strong>{{ b.reference }}</strong> · Apt {{ b.apartment.number }}</span><span class="ks-muted">{{ b.check_in|date:"j M" }}</span></a>{% endfor %}</div>
+  {% endif %}
+</div>
+{% endblock %}

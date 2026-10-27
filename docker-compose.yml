@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kunda}
+      POSTGRES_USER: ${POSTGRES_USER:-kunda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kunda}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kunda} -d ${POSTGRES_DB:-kunda}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUN_SETUP: "1"
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: celery -A config worker -l info
+    volumes:
+      - media:/app/media
+    depends_on:
+      - web
+      - redis
+
+  beat:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
+    depends_on:
+      - web
+      - redis
+
+volumes:
+  pgdata:
+  media:

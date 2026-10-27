@@ -1,0 +1,144 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}{{ b.reference }}{% endblock %}
+{% block heading %}{{ b.reference }} <span class="ks-pill {{ b.status|pill }} align-middle fs-6">{{ b.get_status_display }}</span>{% endblock %}
+{% block actions %}
+{% if b.status == 'pending' %}<form method="post">{% csrf_token %}<button name="action" value="confirm" class="btn btn-ghost"><i class="bi bi-check2-circle"></i> Confirm without deposit</button></form>{% endif %}
+{% if b.status == 'pending' or b.status == 'confirmed' %}<form method="post">{% csrf_token %}<button name="action" value="check_in" class="btn btn-ks"><i class="bi bi-box-arrow-in-right"></i> Check in</button></form>{% endif %}
+{% if b.status == 'checked_in' %}<form method="post">{% csrf_token %}<button name="action" value="check_out" class="btn btn-ks"><i class="bi bi-box-arrow-right"></i> Check out</button></form>{% endif %}
+<a href="{% url 'stays:statement' b.pk %}" target="_blank" class="btn btn-ghost"><i class="bi bi-file-earmark-pdf"></i> Statement</a>
+<a href="{{ b.get_absolute_url }}" target="_blank" class="btn btn-ghost"><i class="bi bi-box-arrow-up-right"></i> Guest page</a>
+{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-8 d-grid gap-4 align-content-start">
+    <div class="ks-card">
+      <div class="row g-3 align-items-center">
+        <div class="col-md-5">
+          <div class="d-flex align-items-center gap-2"><span class="ks-plaque position-static">{{ b.apartment.number }}</span><div><strong>{{ b.apartment.name }}</strong><div class="ks-small ks-muted">{{ b.adults }} adult{{ b.adults|pluralize }}{% if b.children %}, {{ b.children }} child{{ b.children|pluralize:"ren" }}{% endif %} · {{ b.get_source_display }}</div></div></div>
+        </div>
+        <div class="col-md-7">
+          <div class="ks-trip m-0">
+            <div class="ks-trip-date"><small>Check-in</small><strong>{{ b.check_in|date:"D j M" }}</strong></div>
+            <div class="ks-trip-line">{{ b.nights }} night{{ b.nights|pluralize }}</div>
+            <div class="ks-trip-date text-end"><small>Check-out</small><strong>{{ b.check_out|date:"D j M" }}</strong></div>
+          </div>
+        </div>
+      </div>
+      {% if b.special_requests %}<div class="alert alert-light border mt-3 mb-0"><i class="bi bi-chat-quote"></i> {{ b.special_requests }}</div>{% endif %}
+      {% if b.hold_seconds_left is not None %}<div class="ks-hold mt-3"><i class="bi bi-hourglass-split"></i><div>Hold releases in <strong data-countdown="{{ b.hold_seconds_left }}"></strong> unless a deposit arrives.</div></div>{% endif %}
+    </div>
+
+    <div class="ks-card">
+      <div class="ks-card-title"><span>Payments</span><span class="ks-pill {{ b.payment_state|pill }}">{{ b.amount_paid|money }} of {{ b.total_amount|money }}</span></div>
+      <div class="ks-progress mb-3"><div style="width: {{ b.paid_percent }}%"></div></div>
+      <div class="table-responsive"><table class="ks-table mb-3">
+        <thead><tr><th>Date</th><th>Type</th><th>Method / ref</th><th class="text-end">Amount</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for p in b.payments.all %}
+        <tr>
+          <td class="text-nowrap">{{ p.paid_at|default:p.created_at|date:"j M Y H:i" }}{% if p.submitted_by_guest %}<div class="ks-small ks-muted">by guest</div>{% endif %}</td>
+          <td>{{ p.get_kind_display }}</td>
+          <td>{{ p.get_method_display }}<div class="ks-small ks-muted">{{ p.reference|default:"" }}</div></td>
+          <td class="text-end text-nowrap">{% if p.kind == 'refund' %}−{% endif %}{{ p.amount|money }}</td>
+          <td><span class="ks-pill {{ p.status|pill }}">{{ p.get_status_display }}</span></td>
+          <td class="text-end text-nowrap">
+            {% if p.status == 'pending' %}
+            <form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="payment" value="{{ p.pk }}"><button name="action" value="verify_payment" class="btn btn-sm btn-ks">Verify</button> <button name="action" value="reject_payment" class="btn btn-sm btn-ghost">Reject</button></form>
+            {% elif p.status == 'confirmed' %}<a href="{% url 'stays:receipt' p.pk %}" target="_blank" class="btn btn-sm btn-ghost"><i class="bi bi-receipt"></i> {{ p.receipt_number }}</a>{% endif %}
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="ks-empty">No payments yet.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+      {% if b.status != 'cancelled' %}
+      <form method="post" class="row g-2 align-items-end p-3 rounded-3" style="background:var(--ks-mist)">
+        {% csrf_token %}<input type="hidden" name="action" value="record_payment">
+        <div class="col-6 col-md-2"><label class="form-label" for="amount">Amount</label><input id="amount" type="number" step="0.01" min="0" name="amount" class="form-control" value="{{ b.balance|floatformat:'2u' }}" required></div>
+        <div class="col-6 col-md-2"><label class="form-label" for="kind">Type</label><select id="kind" name="kind" class="form-select">{% for v, l in kinds %}<option value="{{ v }}" {% if v == 'installment' %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="method">Method</label><select id="method" name="method" class="form-select">{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="reference">Transaction ID</label><input id="reference" name="reference" class="form-control"></div>
+        <div class="col-md-2 d-grid"><button class="btn btn-ks">Record</button></div>
+        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="notify" id="notify" checked><label class="form-check-label ks-small" for="notify">Send receipt on WhatsApp</label></div></div>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="ks-card">
+      <div class="ks-card-title"><span><i class="bi bi-whatsapp text-success"></i> WhatsApp</span></div>
+      <form method="post" class="d-flex flex-wrap gap-2 mb-3">
+        {% csrf_token %}<input type="hidden" name="action" value="send">
+        <button name="kind" value="confirmation" class="btn btn-sm btn-ghost">Booking confirmation</button>
+        <button name="kind" value="reminder" class="btn btn-sm btn-ghost" {% if not b.balance %}disabled{% endif %}>Payment reminder</button>
+        <button name="kind" value="checkin" class="btn btn-sm btn-ghost">Arrival details &amp; map</button>
+      </form>
+      <form method="post" class="d-flex gap-2 mb-3">
+        {% csrf_token %}<input type="hidden" name="action" value="send"><input type="hidden" name="kind" value="custom">
+        <input name="body" class="form-control" placeholder="Write a message to {{ b.guest.first_name }}…" required>
+        <button class="btn btn-wa"><i class="bi bi-send"></i></button>
+      </form>
+      {% for m in b.messages.all %}
+      <div class="d-flex justify-content-between gap-3 py-2 border-top">
+        <div class="ks-small"><strong>{{ m.get_kind_display }}</strong> · {{ m.created_at|date:"j M H:i" }}<div class="ks-muted text-truncate" style="max-width:520px">{{ m.body|truncatechars:110 }}</div></div>
+        <div class="d-flex gap-1 align-items-start">
+          <span class="ks-pill {{ m.status|pill }}">{{ m.get_status_display }}</span>
+          {% if m.status != 'sent' %}<a class="btn btn-sm btn-wa" href="{{ m.wa_link }}" target="_blank" rel="noopener">Open WhatsApp</a><form method="post">{% csrf_token %}<input type="hidden" name="message" value="{{ m.pk }}"><button name="action" value="mark_sent" class="btn btn-sm btn-ghost" title="Mark as sent"><i class="bi bi-check2-all"></i></button></form>{% endif %}
+        </div>
+      </div>
+      {% empty %}<div class="ks-empty">No messages yet.</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="col-xl-4 d-grid gap-4 align-content-start">
+    <div class="ks-card">
+      <div class="ks-card-title"><span>Guest</span><a href="{% url 'dashboard:guest' b.guest.pk %}" class="btn btn-sm btn-ghost">Profile</a></div>
+      <strong class="fs-5">{{ b.guest.full_name }}</strong>
+      <div class="ks-small ks-muted mb-2">{{ b.guest.country }}{% if b.guest.id_number %} · {{ b.guest.id_type }} {{ b.guest.id_number }}{% endif %}</div>
+      <div class="d-grid gap-2">
+        <a class="btn btn-wa btn-sm" href="{% wa b.guest.wa_number %}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> {{ b.guest.wa_number }}</a>
+        <a class="btn btn-ghost btn-sm" href="tel:{{ b.guest.phone }}"><i class="bi bi-telephone"></i> Call</a>
+        {% if b.guest.email %}<a class="btn btn-ghost btn-sm" href="mailto:{{ b.guest.email }}"><i class="bi bi-envelope"></i> {{ b.guest.email }}</a>{% endif %}
+      </div>
+      {% if history %}<hr><div class="ks-small fw-semibold mb-1">Previous stays</div>{% for h in history %}<div class="ks-small"><a href="{% url 'dashboard:booking' h.pk %}">{{ h.reference }}</a> · Apt {{ h.apartment.number }} · {{ h.check_in|date:"M Y" }}</div>{% endfor %}{% endif %}
+    </div>
+
+    <div class="ks-card">
+      <div class="ks-card-title">Price</div>
+      <div class="ks-quote">
+        <div class="ks-quote-row"><span>{{ b.nights }} nights · {{ b.get_rate_plan_display|lower }}</span><span>{{ b.subtotal|money }}</span></div>
+        <div class="ks-quote-row"><span>Cleaning</span><span>{{ b.cleaning_fee|money }}</span></div>
+        {% if b.discount %}<div class="ks-quote-row text-success"><span>Discount</span><span>− {{ b.discount|money }}</span></div>{% endif %}
+        <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.total_amount|money }}</span></div>
+        <div class="ks-quote-row"><span>Deposit required</span><span>{{ b.deposit_required|money }}</span></div>
+        <div class="ks-quote-row fw-bold {% if b.balance %}text-danger{% endif %}"><span>Balance</span><span>{{ b.balance|money }}</span></div>
+      </div>
+    </div>
+
+    {% if b.is_active %}
+    <div class="ks-card">
+      <div class="ks-card-title">Change stay</div>
+      <form method="post" class="row g-2">
+        {% csrf_token %}<input type="hidden" name="action" value="change_dates">
+        <div class="col-6"><label class="form-label" for="ci">Check-in</label><input id="ci" type="date" name="check_in" value="{{ b.check_in|date:'Y-m-d' }}" class="form-control"></div>
+        <div class="col-6"><label class="form-label" for="co">Check-out</label><input id="co" type="date" name="check_out" value="{{ b.check_out|date:'Y-m-d' }}" class="form-control"></div>
+        <div class="col-12"><label class="form-label" for="disc">Discount</label><input id="disc" type="number" step="0.01" min="0" name="discount" value="{{ b.discount|floatformat:'2u' }}" class="form-control"></div>
+        <div class="col-12 d-grid"><button class="btn btn-ghost">Update and re-price</button></div>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="ks-card">
+      <div class="ks-card-title">Internal notes</div>
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="notes"><textarea name="internal_notes" rows="4" class="form-control mb-2" placeholder="Only staff see this">{{ b.internal_notes }}</textarea><button class="btn btn-sm btn-ghost">Save notes</button></form>
+      <div class="ks-small ks-muted mt-3">Created {{ b.created_at|date:"j M Y H:i" }}{% if b.created_by %} by {{ b.created_by }}{% endif %}{% if b.checked_in_at %}<br>Checked in {{ b.checked_in_at|date:"j M H:i" }}{% endif %}{% if b.checked_out_at %}<br>Checked out {{ b.checked_out_at|date:"j M H:i" }}{% endif %}</div>
+    </div>
+
+    {% if b.is_active %}
+    <form method="post" class="d-flex gap-2" onsubmit="return confirm('Close this booking and release the dates?')">{% csrf_token %}
+      <button name="action" value="cancel" class="btn btn-link text-danger p-0">Cancel booking</button>
+      {% if b.status == 'confirmed' %}<button name="action" value="no_show" class="btn btn-link text-danger p-0 ms-3">Mark no-show</button>{% endif %}
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

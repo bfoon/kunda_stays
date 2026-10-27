@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load stays_tags %}
+{% block title %}Apt {{ apt.number }} – {{ apt.name }} · {{ site.name }}{% endblock %}
+{% block meta %}{{ apt.tagline|default:apt.description|truncatechars:150 }}{% endblock %}
+{% block body_class %}has-mobile-bar{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <nav aria-label="breadcrumb"><ol class="breadcrumb ks-small"><li class="breadcrumb-item"><a href="{% url 'stays:apartments' %}">Apartments</a></li><li class="breadcrumb-item active">Apt {{ apt.number }}</li></ol></nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1"><span class="ks-plaque position-static">{{ apt.number }}</span>{% if apt.status == 'maintenance' %}<span class="ks-pill ks-pill--sun">Temporarily closed for maintenance</span>{% endif %}</div>
+      <h1 class="h2 mb-1">{{ apt.name }}</h1>
+      <p class="ks-muted mb-0">{{ apt.tagline }}</p>
+    </div>
+    <div class="ks-facts fs-6">
+      <span><i class="bi bi-people"></i>Up to {{ apt.capacity }}</span>
+      <span><i class="bi bi-door-closed"></i>{{ apt.bedrooms }} bedroom{{ apt.bedrooms|pluralize }}</span>
+      <span><i class="bi bi-droplet"></i>{{ apt.bathrooms }} bathroom{{ apt.bathrooms|pluralize }}</span>
+      {% if apt.size_sqm %}<span><i class="bi bi-arrows-angle-expand"></i>{{ apt.size_sqm }} m²</span>{% endif %}
+      <span><i class="bi bi-building"></i>{% if apt.floor == 0 %}Ground floor{% else %}Floor {{ apt.floor }}{% endif %}</span>
+    </div>
+  </div>
+
+  {% if photos %}
+  <div class="ks-gallery mb-4">
+    {% for p in photos|slice:":3" %}
+    <button type="button" data-bs-toggle="modal" data-bs-target="#gallery" data-bs-slide-to="{{ forloop.counter0 }}" onclick="bootstrap.Carousel.getOrCreateInstance('#galleryCarousel').to({{ forloop.counter0 }})" aria-label="Open photo {{ forloop.counter }}">
+      <img src="{{ p.image.url }}" alt="{{ p.caption|default:apt.name }}">
+      {% if forloop.last and photos|length > 3 %}<span class="ks-gallery-more"><i class="bi bi-images"></i> {{ photos|length }} photos</span>{% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  <div class="modal fade" id="gallery" tabindex="-1" aria-label="Photo gallery" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered"><div class="modal-content bg-dark border-0">
+      <div id="galleryCarousel" class="carousel slide">
+        <div class="carousel-inner">{% for p in photos %}<div class="carousel-item {% if forloop.first %}active{% endif %}"><img src="{{ p.image.url }}" class="d-block w-100" style="max-height:80vh;object-fit:contain" alt="{{ p.caption }}">{% if p.caption %}<div class="carousel-caption"><span class="ks-pill ks-pill--muted">{{ p.caption }}</span></div>{% endif %}</div>{% endfor %}</div>
+        <button class="carousel-control-prev" type="button" data-bs-target="#galleryCarousel" data-bs-slide="prev"><span class="carousel-control-prev-icon"></span><span class="visually-hidden">Previous</span></button>
+        <button class="carousel-control-next" type="button" data-bs-target="#galleryCarousel" data-bs-slide="next"><span class="carousel-control-next-icon"></span><span class="visually-hidden">Next</span></button>
+      </div>
+    </div></div>
+  </div>
+  {% else %}
+  <div class="ks-gallery mb-4" style="grid-template-columns:1fr;grid-template-rows:1fr"><div class="ks-placeholder" style="background:{{ apt.accent }}">{{ apt.number }}</div></div>
+  {% endif %}
+
+  <div class="row g-5">
+    <div class="col-lg-7">
+      <section class="mb-5">
+        <h2 class="h3">About this apartment</h2>
+        <div class="ks-muted" style="white-space:pre-line">{{ apt.description|default:"A comfortable, fully furnished apartment." }}</div>
+      </section>
+
+      {% if apt.amenities.all %}
+      <section class="mb-5">
+        <h2 class="h3 mb-3">What's included</h2>
+        <div class="ks-amen">{% for a in apt.amenities.all %}<div class="ks-amen-item"><i class="bi bi-{{ a.icon }}"></i>{{ a.name }}</div>{% endfor %}</div>
+      </section>
+      {% endif %}
+
+      <section class="mb-5">
+        <h2 class="h3 mb-3">Rates</h2>
+        <div class="row g-3">
+          <div class="col-sm-6"><div class="ks-card h-100"><small class="ks-muted fw-semibold">Per night</small><div class="ks-display fs-3">{{ apt.daily_rate|money }}</div><small class="ks-muted">Best for short visits and missions</small></div></div>
+          {% if apt.monthly_rate %}<div class="col-sm-6"><div class="ks-card h-100" style="border-color:var(--ks-sun);background:#FFFCEF"><small class="ks-muted fw-semibold">Per month (30 nights)</small><div class="ks-display fs-3">{{ apt.monthly_rate|money }}</div><small class="ks-muted">Applied automatically for stays of 30+ nights</small></div></div>{% endif %}
+        </div>
+        <p class="ks-small ks-muted mt-3 mb-0">Cleaning fee {{ apt.cleaning_fee|money }} per stay. {{ apt.deposit_percent }}% deposit confirms your booking; the balance is due by check-out.</p>
+      </section>
+
+      <section class="mb-5">
+        <h2 class="h3 mb-3">Good to know</h2>
+        <ul class="ks-muted">
+          <li>Check-in from {{ site.checkin_time }}, check-out by {{ site.checkout_time }}. Early or late? Ask on WhatsApp.</li>
+          <li>Pay by Wave, Afrimoney, QMoney, bank transfer or cash at reception.</li>
+          <li>Unpaid holds are released after {{ site.hold_hours }} hours.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="col-lg-5" id="book">
+      <form id="ks-booking" class="ks-booking-panel" method="post" action="{% url 'stays:book' apt.slug %}" data-api="{% url 'stays:availability' apt.slug %}">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+          <div><span class="ks-display fs-4">{{ apt.daily_rate|money }}</span> <span class="ks-muted">/ night</span></div>
+          <button type="button" class="btn btn-link btn-sm p-0" data-clear-dates>Clear dates</button>
+        </div>
+        <div id="ks-calendar"></div>
+        <div class="ks-legend"><span class="free">Free</span><span class="taken">Taken</span><span class="mine">Your stay</span></div>
+        <input type="hidden" name="check_in" value="{{ check_in }}"><input type="hidden" name="check_out" value="{{ check_out }}">
+
+        <div id="ks-quote" class="ks-quote my-3"></div>
+
+        {% if apt.is_bookable %}
+        <div class="row g-2 mb-3">
+          <div class="col-6"><label class="form-label" for="adults">Adults</label><select id="adults" name="adults" class="form-select">{% for n in "123456789" %}{% if forloop.counter <= apt.capacity %}<option value="{{ n }}" {% if forloop.counter == guests %}selected{% endif %}>{{ n }}</option>{% endif %}{% endfor %}</select></div>
+          <div class="col-6"><label class="form-label" for="children">Children</label><select id="children" name="children" class="form-select">{% for n in "012345" %}<option value="{{ n }}">{{ n }}</option>{% endfor %}</select></div>
+        </div>
+
+        <span class="form-label d-block">How would you like to pay?</span>
+        <div class="row g-2 mb-3">
+          <div class="col-6"><label class="ks-option position-relative"><input type="radio" name="payment_option" value="deposit" checked><strong>Deposit now</strong><small><span data-deposit-label>{{ apt.deposit_percent }}%</span> today, rest later</small></label></div>
+          <div class="col-6"><label class="ks-option position-relative"><input type="radio" name="payment_option" value="full"><strong>Pay in full</strong><small><span data-total-label>Everything</span> in one go</small></label></div>
+        </div>
+
+        <div class="d-grid gap-2 mb-3">
+          <div><label class="form-label" for="full_name">Full name</label><input id="full_name" name="full_name" class="form-control" required autocomplete="name"></div>
+          <div class="row g-2">
+            <div class="col-sm-6"><label class="form-label" for="phone">Phone</label><input id="phone" name="phone" class="form-control" required inputmode="tel" autocomplete="tel" placeholder="+220 …"></div>
+            <div class="col-sm-6"><label class="form-label" for="email">Email <span class="ks-muted fw-normal">(optional)</span></label><input id="email" name="email" type="email" class="form-control" autocomplete="email"></div>
+          </div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" name="same_whatsapp" id="same_whatsapp" checked><label class="form-check-label" for="same_whatsapp">This number is on WhatsApp</label></div>
+          <div id="ks-wa-wrap" class="d-none"><label class="form-label" for="whatsapp">WhatsApp number</label><input id="whatsapp" name="whatsapp" class="form-control" inputmode="tel"></div>
+          <div><label class="form-label" for="country">Coming from</label><input id="country" name="country" class="form-control" placeholder="e.g. Senegal, UK, Banjul" autocomplete="country-name"></div>
+          <div><label class="form-label" for="special_requests">Anything we should prepare?</label><textarea id="special_requests" name="special_requests" rows="2" class="form-control" placeholder="Airport pickup, cot, late arrival…"></textarea></div>
+          <input type="text" name="website" class="d-none" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="form-check"><input class="form-check-input" type="checkbox" name="agree" id="agree" required><label class="form-check-label ks-small" for="agree">I agree to the house rules and that unpaid holds are released after {{ site.hold_hours }} hours.</label></div>
+        </div>
+        <button type="submit" class="btn btn-ks btn-lg w-100" disabled><i class="bi bi-key me-1"></i> Hold these dates</button>
+        <p class="ks-small ks-muted text-center mt-2 mb-0">No payment is taken on this page.</p>
+        {% else %}
+        <div class="alert alert-warning mb-0">This apartment isn't taking bookings right now. <a href="{{ site.whatsapp_link }}" target="_blank" rel="noopener">Ask us on WhatsApp</a> about dates.</div>
+        {% endif %}
+        <a class="btn btn-wa w-100 mt-2" target="_blank" rel="noopener" href="{% wa site.whatsapp 'Hello, I have a question about Apt '|add:apt.number %}"><i class="bi bi-whatsapp me-1"></i> Ask about Apt {{ apt.number }}</a>
+      </form>
+    </div>
+  </div>
+
+  {% if others %}
+  <section class="ks-section">
+    <h2 class="mb-4">Other apartments</h2>
+    <div class="row g-4">{% for apt in others %}<div class="col-md-4">{% include "stays/_apt_card.html" %}</div>{% endfor %}</div>
+  </section>
+  {% endif %}
+</div>
+<div class="ks-mobile-bar">
+  <div id="ks-mobile-price"><strong>{{ apt.daily_rate|money }}</strong> <span class="ks-muted ks-small">/ night</span></div>
+  <a href="#book" class="btn btn-ks">Choose dates</a>
+</div>
+{% endblock %}

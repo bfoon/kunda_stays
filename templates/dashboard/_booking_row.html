@@ -1,0 +1,9 @@
+{% load stays_tags %}
+<tr>
+  <td><a href="{% url 'dashboard:booking' b.pk %}">{{ b.reference }}</a><div class="ks-small ks-muted">{{ b.get_source_display }}</div></td>
+  <td>{{ b.guest.full_name }}<div class="ks-small ks-muted">{{ b.guest.phone }}</div></td>
+  <td><span class="ks-plaque position-static" style="font-size:.85rem;padding:.15rem .45rem">{{ b.apartment.number }}</span></td>
+  <td class="text-nowrap">{{ b.check_in|date:"j M" }} – {{ b.check_out|date:"j M y" }}<div class="ks-small ks-muted">{{ b.nights }} night{{ b.nights|pluralize }}</div></td>
+  <td><span class="ks-pill {{ b.status|pill }}">{{ b.get_status_display }}</span></td>
+  <td class="text-end text-nowrap">{{ b.total_amount|money }}{% if b.balance %}<div class="ks-small text-danger">owes {{ b.balance|money }}</div>{% else %}<div class="ks-small text-success">paid</div>{% endif %}</td>
+</tr>

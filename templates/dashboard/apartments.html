@@ -1,0 +1,35 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Apartments{% endblock %}
+{% block heading %}Apartments{% endblock %}
+{% block actions %}<a href="{% url 'dashboard:apartment_new' %}" class="btn btn-ks"><i class="bi bi-plus-lg"></i> Add apartment</a>{% endblock %}
+{% block content %}
+<div class="row g-4">
+  {% for i in items %}{% with a=i.apt %}
+  <div class="col-md-6 col-xxl-4">
+    <div class="ks-card h-100 d-flex flex-column gap-3">
+      <div class="d-flex gap-3">
+        <div class="ks-photo-tile flex-none" style="width:110px">{% with c=a.cover %}{% if c %}<img src="{{ c.image.url }}" alt="">{% else %}<div class="ks-placeholder" style="background:{{ a.accent }};font-size:1.6rem">{{ a.number }}</div>{% endif %}{% endwith %}</div>
+        <div class="flex-grow-1 min-w-0">
+          <div class="d-flex justify-content-between gap-2"><strong class="ks-display fs-5">{{ a.number }} · {{ a.name }}</strong></div>
+          <div class="ks-small ks-muted">{{ a.bedrooms }} bed · sleeps {{ a.capacity }} · {{ a.daily_rate|money }}/night{% if a.monthly_rate %} · {{ a.monthly_rate|money }}/month{% endif %}</div>
+          <div class="d-flex flex-wrap gap-1 mt-2"><span class="ks-pill {{ a.status|pill }}">{{ a.get_status_display }}</span>{% if a.is_featured %}<span class="ks-pill ks-pill--sun"><i class="bi bi-star-fill"></i> Featured</span>{% endif %}{% if a.open_tickets %}<span class="ks-pill ks-pill--bougain"><i class="bi bi-tools"></i> {{ a.open_tickets }}</span>{% endif %}</div>
+        </div>
+      </div>
+      <div>
+        <div class="d-flex justify-content-between ks-small mb-1"><span class="ks-muted">Occupancy, last 30 days</span><strong>{{ i.occ30 }}%</strong></div>
+        <div class="ks-progress"><div style="width: {{ i.occ30 }}%"></div></div>
+      </div>
+      <div class="ks-small">{% if i.current %}<i class="bi bi-person-fill text-success"></i> {{ i.current.guest.full_name }} until {{ i.current.check_out|date:"j M" }}{% else %}<span class="ks-muted"><i class="bi bi-door-open"></i> Nobody in house</span>{% endif %}</div>
+      <div class="d-flex gap-2 mt-auto">
+        <a href="{% url 'dashboard:apartment_edit' a.pk %}" class="btn btn-sm btn-ks">Edit</a>
+        <a href="{{ a.get_absolute_url }}" target="_blank" class="btn btn-sm btn-ghost">View page</a>
+        <a href="{% url 'dashboard:booking_new' %}?apartment={{ a.pk }}" class="btn btn-sm btn-ghost">Book</a>
+      </div>
+    </div>
+  </div>
+  {% endwith %}{% empty %}
+  <div class="col-12"><div class="ks-card ks-empty"><i class="bi bi-building fs-1"></i><p>Add your first apartment to start taking bookings.</p><a href="{% url 'dashboard:apartment_new' %}" class="btn btn-ks">Add apartment</a></div></div>
+  {% endfor %}
+</div>
+{% endblock %}

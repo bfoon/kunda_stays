@@ -1,0 +1,32 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}{{ g.full_name }}{% endblock %}
+{% block heading %}{{ g.full_name }}{% endblock %}
+{% block actions %}<a class="btn btn-wa" href="{% wa g.wa_number %}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> WhatsApp</a><a class="btn btn-ks" href="{% url 'dashboard:booking_new' %}"><i class="bi bi-plus-lg"></i> New booking</a>{% endblock %}
+{% block content %}
+<div class="ks-kpis">
+  <div class="ks-kpi ks-kpi--lead"><small>Stays</small><strong>{{ bookings|length }}</strong></div>
+  <div class="ks-kpi"><small>Total paid</small><strong>{{ spent|money }}</strong></div>
+  <div class="ks-kpi"><small>Guest since</small><strong>{{ g.created_at|date:"M Y" }}</strong></div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-5">
+    <form method="post" class="ks-card d-grid gap-3">
+      {% csrf_token %}
+      <div class="ks-card-title m-0">Profile</div>
+      <div><label class="form-label" for="full_name">Full name</label><input id="full_name" name="full_name" class="form-control" value="{{ g.full_name }}"></div>
+      <div class="row g-2"><div class="col-6"><label class="form-label" for="phone">Phone</label><input id="phone" name="phone" class="form-control" value="{{ g.phone }}"></div><div class="col-6"><label class="form-label" for="whatsapp">WhatsApp</label><input id="whatsapp" name="whatsapp" class="form-control" value="{{ g.whatsapp }}"></div></div>
+      <div class="row g-2"><div class="col-7"><label class="form-label" for="email">Email</label><input id="email" name="email" type="email" class="form-control" value="{{ g.email }}"></div><div class="col-5"><label class="form-label" for="country">Country</label><input id="country" name="country" class="form-control" value="{{ g.country }}"></div></div>
+      <div class="row g-2"><div class="col-5"><label class="form-label" for="id_type">ID type</label><input id="id_type" name="id_type" class="form-control" value="{{ g.id_type }}"></div><div class="col-7"><label class="form-label" for="id_number">ID number</label><input id="id_number" name="id_number" class="form-control" value="{{ g.id_number }}"></div></div>
+      <div><label class="form-label" for="notes">Notes</label><textarea id="notes" name="notes" rows="3" class="form-control" placeholder="Preferences, allergies, company…">{{ g.notes }}</textarea></div>
+      <button class="btn btn-ks">Save guest</button>
+    </form>
+  </div>
+  <div class="col-xl-7">
+    <div class="ks-card p-0"><div class="table-responsive"><table class="ks-table">
+      <thead><tr><th>Booking</th><th>Guest</th><th>Apt</th><th>Stay</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+      <tbody>{% for b in bookings %}{% include "dashboard/_booking_row.html" %}{% endfor %}</tbody>
+    </table></div></div>
+  </div>
+</div>
+{% endblock %}

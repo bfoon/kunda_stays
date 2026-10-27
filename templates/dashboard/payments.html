@@ -1,0 +1,34 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Payments{% endblock %}
+{% block heading %}Payments{% endblock %}
+{% block content %}
+<div class="ks-kpis">
+  <div class="ks-kpi ks-kpi--lead"><small>Confirmed in this view</small><strong>{{ totals|money }}</strong></div>
+  <div class="ks-kpi"><small>Waiting for verification</small><strong>{{ pending_count }}</strong><a class="ks-kpi-note" href="?status=pending">Show them</a></div>
+</div>
+<form class="ks-card mb-3 row g-2 align-items-end mx-0">
+  <div class="col-6 col-md-3"><label class="form-label" for="status">Status</label><select id="status" name="status" class="form-select"><option value="">Any</option>{% for v, l in statuses %}<option value="{{ v }}" {% if f.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-3"><label class="form-label" for="method">Method</label><select id="method" name="method" class="form-select"><option value="">Any</option>{% for v, l in methods %}<option value="{{ v }}" {% if f.method == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="from">From</label><input id="from" type="date" name="from" class="form-control" value="{{ f.from }}"></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="to">To</label><input id="to" type="date" name="to" class="form-control" value="{{ f.to }}"></div>
+  <div class="col-md-2 d-grid"><button class="btn btn-ks">Filter</button></div>
+</form>
+<div class="ks-card p-0"><div class="table-responsive"><table class="ks-table">
+  <thead><tr><th>Date</th><th>Receipt</th><th>Booking</th><th>Method / ref</th><th class="text-end">Amount</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for p in page %}
+  <tr>
+    <td>{{ p.paid_at|default:p.created_at|date:"j M Y H:i" }}</td>
+    <td>{% if p.receipt_number %}<a href="{% url 'stays:receipt' p.pk %}" target="_blank">{{ p.receipt_number }}</a>{% else %}<span class="ks-muted">—</span>{% endif %}</td>
+    <td><a href="{% url 'dashboard:booking' p.booking.pk %}">{{ p.booking.reference }}</a><div class="ks-small ks-muted">{{ p.booking.guest.full_name }} · Apt {{ p.booking.apartment.number }}</div></td>
+    <td>{{ p.get_method_display }}<div class="ks-small ks-muted">{{ p.reference }}</div></td>
+    <td class="text-end">{% if p.kind == 'refund' %}−{% endif %}{{ p.amount|money }}<div class="ks-small ks-muted">{{ p.get_kind_display }}</div></td>
+    <td><span class="ks-pill {{ p.status|pill }}">{{ p.get_status_display }}</span></td>
+    <td class="text-end text-nowrap">{% if p.status == 'pending' %}<form method="post" class="d-inline">{% csrf_token %}<input type="hidden" name="payment" value="{{ p.pk }}"><button name="action" value="verify" class="btn btn-sm btn-ks">Verify</button> <button name="action" value="reject" class="btn btn-sm btn-ghost">Reject</button></form>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7" class="ks-empty">No payments match.</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+{% include "dashboard/_pager.html" %}
+{% endblock %}

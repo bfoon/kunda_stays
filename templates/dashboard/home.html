@@ -1,0 +1,100 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Today{% endblock %}
+{% block heading %}{{ today|date:"l, j F" }}{% endblock %}
+{% block actions %}
+<a href="{% url 'dashboard:booking_new' %}" class="btn btn-ks"><i class="bi bi-plus-lg"></i> New booking</a>
+<a href="{% url 'dashboard:tape' %}" class="btn btn-ghost"><i class="bi bi-calendar3-range"></i> Occupancy chart</a>
+{% endblock %}
+{% block content %}
+<div class="ks-kpis">
+  <div class="ks-kpi ks-kpi--lead"><span class="ks-gauge" style="--p: {{ occupancy }}"></span><small>Occupied tonight</small><strong>{{ occupancy }}%</strong><span class="ks-kpi-note">{{ occupied }} of {{ units }} apartments</span></div>
+  <div class="ks-kpi"><small>Collected this month</small><strong>{{ revenue_month|money }}</strong><span class="ks-kpi-note">Confirmed payments</span></div>
+  <div class="ks-kpi"><small>Outstanding balances</small><strong>{{ outstanding|money }}</strong><span class="ks-kpi-note">Across active bookings</span></div>
+  <div class="ks-kpi"><small>In house</small><strong>{{ in_house }}</strong><span class="ks-kpi-note">{{ arrivals|length }} arriving · {{ departures|length }} leaving today</span></div>
+</div>
+
+{% if pending_payments or to_send or inquiries %}
+<div class="d-flex flex-wrap gap-2 mb-4">
+  {% if pending_payments %}<a href="{% url 'dashboard:payments' %}?status=pending" class="ks-pill ks-pill--sun fs-6 text-decoration-none"><i class="bi bi-hourglass"></i> {{ pending_payments|length }} payment{{ pending_payments|length|pluralize }} to verify</a>{% endif %}
+  {% if to_send %}<a href="{% url 'dashboard:messages' %}" class="ks-pill ks-pill--river fs-6 text-decoration-none"><i class="bi bi-whatsapp"></i> {{ to_send }} WhatsApp message{{ to_send|pluralize }} ready to send</a>{% endif %}
+  {% if inquiries %}<a href="{% url 'dashboard:messages' %}?tab=inquiries" class="ks-pill ks-pill--bougain fs-6 text-decoration-none"><i class="bi bi-envelope"></i> {{ inquiries }} new enquir{{ inquiries|pluralize:"y,ies" }}</a>{% endif %}
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-xl-6">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span><i class="bi bi-box-arrow-in-right text-success"></i> Arriving today</span></div>
+      {% for b in arrivals %}
+      <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-bottom">
+        <div><span class="ks-plaque position-static me-2" style="font-size:.85rem;padding:.15rem .45rem">{{ b.apartment.number }}</span><a href="{% url 'dashboard:booking' b.pk %}" class="fw-semibold">{{ b.guest.full_name }}</a> <span class="ks-small ks-muted">{{ b.nights }}n{% if b.balance %} · owes {{ b.balance|money }}{% endif %}</span></div>
+        <form method="post" action="{% url 'dashboard:booking' b.pk %}">{% csrf_token %}<input type="hidden" name="action" value="check_in"><button class="btn btn-sm btn-ks">Check in</button></form>
+      </div>
+      {% empty %}<div class="ks-empty">No arrivals today.</div>{% endfor %}
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span><i class="bi bi-box-arrow-right text-danger"></i> Leaving today</span></div>
+      {% for b in departures %}
+      <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-bottom">
+        <div><span class="ks-plaque position-static me-2" style="font-size:.85rem;padding:.15rem .45rem">{{ b.apartment.number }}</span><a href="{% url 'dashboard:booking' b.pk %}" class="fw-semibold">{{ b.guest.full_name }}</a>{% if b.balance %} <span class="ks-pill ks-pill--bougain">owes {{ b.balance|money }}</span>{% endif %}</div>
+        <form method="post" action="{% url 'dashboard:booking' b.pk %}">{% csrf_token %}<input type="hidden" name="action" value="check_out"><button class="btn btn-sm btn-ghost">Check out</button></form>
+      </div>
+      {% empty %}<div class="ks-empty">No departures today.</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span>Money collected, last 6 months</span><a class="btn btn-sm btn-ghost" href="{% url 'dashboard:reports' %}">Reports</a></div>
+      <canvas id="rev" height="110" aria-label="Revenue chart"></canvas>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="ks-card h-100">
+      <div class="ks-card-title">Next 7 nights</div>
+      <div class="ks-week">{% for d in week_load %}<div class="{% if forloop.first %}today{% endif %}" title="{{ d.count }} booked"><span class="ks-small">{{ d.pct }}%</span><span class="bar" style="height: {{ d.pct }}%"></span>{{ d.day|date:"D" }}</div>{% endfor %}</div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span>Payments to verify</span><a class="btn btn-sm btn-ghost" href="{% url 'dashboard:payments' %}?status=pending">All</a></div>
+      {% for p in pending_payments %}
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 py-2 border-bottom">
+        <div><strong>{{ p.amount|money }}</strong> via {{ p.get_method_display }} <span class="ks-small ks-muted">ref {{ p.reference|default:"—" }}</span><div class="ks-small"><a href="{% url 'dashboard:booking' p.booking.pk %}">{{ p.booking.reference }}</a> · {{ p.booking.guest.full_name }}</div></div>
+        <form method="post" action="{% url 'dashboard:payments' %}" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="payment" value="{{ p.pk }}"><button name="action" value="verify" class="btn btn-sm btn-ks">Verify</button><button name="action" value="reject" class="btn btn-sm btn-ghost">Reject</button></form>
+      </div>
+      {% empty %}<div class="ks-empty">Nothing waiting. Guest-submitted payments appear here.</div>{% endfor %}
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span>Holds awaiting deposit</span></div>
+      {% for b in awaiting_deposit %}
+      <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-bottom">
+        <div><a href="{% url 'dashboard:booking' b.pk %}" class="fw-semibold">{{ b.guest.full_name }}</a> <span class="ks-small ks-muted">Apt {{ b.apartment.number }} · {{ b.check_in|date:"j M" }}</span></div>
+        <div class="d-flex gap-1 align-items-center">{% if b.hold_seconds_left is not None %}<span class="ks-pill ks-pill--sun" data-countdown="{{ b.hold_seconds_left }}"></span>{% endif %}<a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="{% wa b.guest.wa_number 'Hello '|add:b.guest.first_name|add:', just checking in about your booking '|add:b.reference|add:'. Can we help with the deposit?' %}"><i class="bi bi-whatsapp"></i></a></div>
+      </div>
+      {% empty %}<div class="ks-empty">No open holds.</div>{% endfor %}
+      {% if tickets %}
+      <div class="ks-card-title mt-4"><span>Open maintenance</span><a class="btn btn-sm btn-ghost" href="{% url 'dashboard:maintenance' %}">All</a></div>
+      {% for t in tickets %}<div class="d-flex justify-content-between py-1"><span>Apt {{ t.apartment.number }} · {{ t.title }}</span><span class="ks-pill {{ t.priority|pill }}">{{ t.get_priority_display }}</span></div>{% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ chart_labels|json_script:"rev-labels" }}{{ chart_values|json_script:"rev-values" }}
+<script>
+new Chart(document.getElementById("rev"), {
+  type: "bar",
+  data: { labels: JSON.parse(document.getElementById("rev-labels").textContent),
+          datasets: [{ data: JSON.parse(document.getElementById("rev-values").textContent), backgroundColor: "#0E6A78", borderRadius: 8, maxBarThickness: 46 }] },
+  options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: "#EAF2F1" } }, x: { grid: { display: false } } } }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load stays_tags %}
+{% block content %}
+<section class="ks-hero">
+  <div class="container">
+    <div class="row g-5 align-items-center">
+      <div class="col-lg-6">
+        <h1 class="mb-3">Your own front door in The Gambia.</h1>
+        <p class="lead mb-4">Fully furnished apartments for a night, a week or a whole posting. See what's free, book in minutes, pay with mobile money, and message us on WhatsApp any time.</p>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{% url 'stays:apartments' %}" class="btn btn-sun btn-lg">See apartments</a>
+          <a href="{{ site.whatsapp_link }}" target="_blank" rel="noopener" class="btn btn-lg btn-outline-light"><i class="bi bi-whatsapp me-1"></i> Ask on WhatsApp</a>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ks-board" aria-label="Tonight's availability">
+          <div class="ks-board-head">
+            <span>Tonight, {{ today|date:"l j F" }}</span>
+            <span><strong>{{ free_tonight }}</strong> of {{ doors|length }} doors open</span>
+          </div>
+          <div class="ks-doors">
+            {% for d in doors %}
+            <a href="{{ d.apt.get_absolute_url }}{% if d.free %}?check_in={{ today|date:'Y-m-d' }}&check_out={{ tomorrow|date:'Y-m-d' }}{% endif %}" class="ks-door ks-door-enter {% if d.free %}ks-door--free{% else %}ks-door--busy{% endif %}" style="animation-delay: {{ forloop.counter0 }}00ms" title="Apt {{ d.apt.number }} – {{ d.apt.name }}">
+              <span class="ks-door-num">{{ d.apt.number }}</span>
+              <span class="ks-door-knob"></span>
+              <span class="ks-door-state">{% if d.free %}Free tonight{% else %}Occupied{% endif %}</span>
+            </a>
+            {% empty %}<p class="text-white-50">Apartments appear here once added in the dashboard.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <svg class="ks-hero-river" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true"><path fill="currentColor" d="M0,58 C220,92 420,18 720,42 C1010,66 1200,14 1440,40 L1440,90 L0,90 Z"/></svg>
+</section>
+
+<div class="container">
+  <form class="ks-search" action="{% url 'stays:apartments' %}" method="get">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-6 col-lg-5">
+        <label class="form-label" for="dates">Dates</label>
+        <input id="dates" class="form-control" data-range-picker placeholder="Arrival — departure" readonly>
+        <input type="hidden" name="check_in"><input type="hidden" name="check_out">
+      </div>
+      <div class="col-6 col-md-3 col-lg-2">
+        <label class="form-label" for="guests">Guests</label>
+        <select id="guests" name="guests" class="form-select">{% for n in "123456" %}<option value="{{ n }}">{{ n }} guest{{ n|pluralize }}</option>{% endfor %}</select>
+      </div>
+      <div class="col-6 col-md-3 col-lg-2">
+        <label class="form-label" for="bedrooms">Bedrooms</label>
+        <select id="bedrooms" name="bedrooms" class="form-select"><option value="">Any</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option></select>
+      </div>
+      <div class="col-lg-3 d-grid"><button class="btn btn-ks btn-lg"><i class="bi bi-search me-1"></i> Check availability</button></div>
+    </div>
+  </form>
+</div>
+
+<section class="ks-section">
+  <div class="container">
+    <div class="ks-section-head">
+      <div><h2>Guest favourites</h2><p>{% if from_rate %}Nightly from {{ from_rate|money }}. Stay 30 nights or more and monthly pricing applies automatically.{% endif %}</p></div>
+      <a class="btn btn-ghost" href="{% url 'stays:apartments' %}">All apartments</a>
+    </div>
+    <div class="row g-4">
+      {% for apt in featured %}<div class="col-md-6 col-lg-4">{% include "stays/_apt_card.html" %}</div>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="ks-section pt-0">
+  <div class="container">
+    <div class="row g-5">
+      <div class="col-lg-5">
+        <h2 class="mb-3">Booking takes four steps</h2>
+        <p class="ks-muted">No account needed. Your booking page works like a ticket: keep the link, scan the QR at reception, download receipts any time.</p>
+      </div>
+      <div class="col-lg-7">
+        <div class="ks-steps">
+          <div class="ks-step"><h3>Pick your dates</h3><p class="ks-muted ks-small">The calendar shows exactly which nights are free. Taken nights can't be selected.</p></div>
+          <div class="ks-step"><h3>Hold the apartment</h3><p class="ks-muted ks-small">We keep your dates for {{ site.hold_hours }} hours while you arrange the deposit.</p></div>
+          <div class="ks-step"><h3>Pay your way</h3><p class="ks-muted ks-small">Wave, Afrimoney, QMoney, bank transfer or cash. Deposit now, balance later.</p></div>
+          <div class="ks-step"><h3>Get your keys</h3><p class="ks-muted ks-small">Confirmation, receipts and directions arrive on WhatsApp.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if amenities %}
+<section class="ks-section pt-0">
+  <div class="container">
+    <h2 class="mb-4">In every apartment</h2>
+    <div class="ks-amen">{% for a in amenities %}<div class="ks-amen-item"><i class="bi bi-{{ a.icon }}"></i>{{ a.name }}</div>{% endfor %}</div>
+  </div>
+</section>
+{% endif %}
+
+<section class="ks-section pt-0">
+  <div class="container">
+    <div class="row g-4 align-items-stretch">
+      <div class="col-lg-5">
+        <div class="ks-card h-100 d-flex flex-column">
+          <h2 class="h3">Find us</h2>
+          <p class="ks-muted">{{ site.address }}</p>
+          <div class="d-grid gap-2 mt-auto">
+            <a class="btn btn-ks" href="{{ site.maps_link }}" target="_blank" rel="noopener"><i class="bi bi-sign-turn-right me-1"></i> Get directions</a>
+            <a class="btn btn-wa" href="{{ site.whatsapp_link }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i> Arrange an airport pickup</a>
+            <a class="btn btn-ghost" href="tel:{{ site.phone }}"><i class="bi bi-telephone me-1"></i> Call {{ site.phone }}</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7"><iframe class="ks-map h-100" src="{{ site.maps_embed }}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe></div>
+    </div>
+  </div>
+</section>
+{% endblock %}

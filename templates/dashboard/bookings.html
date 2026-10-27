@@ -1,0 +1,26 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Bookings{% endblock %}
+{% block heading %}Bookings{% endblock %}
+{% block actions %}<a href="{% url 'dashboard:booking_new' %}" class="btn btn-ks"><i class="bi bi-plus-lg"></i> New booking</a>{% endblock %}
+{% block content %}
+<ul class="nav nav-pills mb-3 gap-1">
+  <li class="nav-item"><a class="nav-link {% if not f.view %}active{% endif %}" href="?">All</a></li>
+  <li class="nav-item"><a class="nav-link {% if f.view == 'upcoming' %}active{% endif %}" href="?view=upcoming">Upcoming</a></li>
+  <li class="nav-item"><a class="nav-link {% if f.view == 'unpaid' %}active{% endif %}" href="?view=unpaid">With balance</a></li>
+</ul>
+<form class="ks-card mb-3 row g-2 align-items-end mx-0">
+  <input type="hidden" name="view" value="{{ f.view }}">
+  <div class="col-md-3"><label class="form-label" for="q">Search</label><input id="q" name="q" class="form-control" value="{{ f.q }}" placeholder="Reference, name, phone"></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="status">Status</label><select id="status" name="status" class="form-select"><option value="">Any</option>{% for v, l in statuses %}<option value="{{ v }}" {% if f.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="apartment">Apartment</label><select id="apartment" name="apartment" class="form-select"><option value="">Any</option>{% for a in apartments %}<option value="{{ a.number }}" {% if f.apartment == a.number %}selected{% endif %}>{{ a.number }}</option>{% endfor %}</select></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="from">Staying from</label><input id="from" type="date" name="from" class="form-control" value="{{ f.from }}"></div>
+  <div class="col-6 col-md-2"><label class="form-label" for="to">to</label><input id="to" type="date" name="to" class="form-control" value="{{ f.to }}"></div>
+  <div class="col-md-1 d-grid"><button class="btn btn-ks"><i class="bi bi-funnel"></i></button></div>
+</form>
+<div class="ks-card p-0"><div class="table-responsive"><table class="ks-table">
+  <thead><tr><th>Booking</th><th>Guest</th><th>Apt</th><th>Stay</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+  <tbody>{% for b in page %}{% include "dashboard/_booking_row.html" %}{% empty %}<tr><td colspan="6" class="ks-empty">No bookings match these filters.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% include "dashboard/_pager.html" %}
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Reports{% endblock %}
+{% block heading %}Reports{% endblock %}
+{% block actions %}
+<a class="btn btn-ghost" href="?from={{ start|date:'Y-m-d' }}&to={{ end|date:'Y-m-d' }}&export=csv"><i class="bi bi-filetype-csv"></i> Export bookings</a>
+<button class="btn btn-ghost" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+{% endblock %}
+{% block content %}
+<form class="ks-card mb-4 row g-2 align-items-end mx-0">
+  <div class="col-6 col-md-3"><label class="form-label" for="from">From</label><input id="from" type="date" name="from" class="form-control" value="{{ start|date:'Y-m-d' }}"></div>
+  <div class="col-6 col-md-3"><label class="form-label" for="to">To</label><input id="to" type="date" name="to" class="form-control" value="{{ end|date:'Y-m-d' }}"></div>
+  <div class="col-md-2 d-grid"><button class="btn btn-ks">Update</button></div>
+  <div class="col-md-4 d-flex gap-2"><a class="btn btn-sm btn-ghost" href="?from={{ this_month|date:'Y-m-d' }}">This month</a><a class="btn btn-sm btn-ghost" href="?from={{ last_month|date:'Y-m-d' }}&to={{ last_month_end|date:'Y-m-d' }}">Last month</a></div>
+</form>
+<p class="ks-muted">{{ start|date:"j M Y" }} – {{ end|date:"j M Y" }} · {{ days }} days</p>
+<div class="ks-kpis">
+  <div class="ks-kpi ks-kpi--lead"><small>Money collected</small><strong>{{ collected|money }}</strong><span class="ks-kpi-note">Confirmed payments by date paid</span></div>
+  <div class="ks-kpi"><small>Room revenue earned</small><strong>{{ room_rev|money }}</strong><span class="ks-kpi-note">Nights stayed in this period</span></div>
+  <div class="ks-kpi"><small>Occupancy</small><strong>{{ occupancy }}%</strong><span class="ks-kpi-note">{{ nights_sold }} nights sold</span></div>
+  <div class="ks-kpi"><small>Average nightly rate</small><strong>{{ adr|money }}</strong><span class="ks-kpi-note">RevPAR {{ revpar|money }}</span></div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-8"><div class="ks-card h-100"><div class="ks-card-title">Daily occupancy</div><canvas id="occ" height="120"></canvas></div></div>
+  <div class="col-xl-4"><div class="ks-card h-100"><div class="ks-card-title">By payment method</div>
+    {% for m in by_method %}<div class="d-flex justify-content-between py-2 border-bottom"><span>{{ m.label }} <span class="ks-muted ks-small">× {{ m.n }}</span></span><strong>{{ m.total|money }}</strong></div>{% empty %}<div class="ks-empty">No payments in this period.</div>{% endfor %}
+    <div class="ks-card-title mt-4">Booking sources</div>
+    {% for name, n in sources %}<div class="d-flex justify-content-between py-1"><span>{{ name }}</span><strong>{{ n }}</strong></div>{% empty %}<div class="ks-empty">No stays in this period.</div>{% endfor %}
+    <div class="d-flex justify-content-between mt-4 pt-2 border-top"><span>Maintenance spend</span><strong>{{ maint_cost|money }}</strong></div>
+  </div></div>
+  <div class="col-xl-7"><div class="ks-card p-0"><div class="ks-card-title p-3 pb-0">By apartment</div><div class="table-responsive"><table class="ks-table">
+    <thead><tr><th>Apt</th><th>Nights</th><th>Occupancy</th><th class="text-end">Room revenue</th><th class="text-end">Collected</th></tr></thead>
+    <tbody>{% for r in per_apt %}<tr><td><strong>{{ r.apt.number }}</strong> <span class="ks-small ks-muted">{{ r.apt.name }}</span></td><td>{{ r.nights }}</td><td style="min-width:140px"><div class="d-flex align-items-center gap-2"><div class="ks-progress flex-grow-1" style="height:8px"><div style="width: {{ r.occ }}%"></div></div><span class="ks-small">{{ r.occ }}%</span></div></td><td class="text-end">{{ r.room_rev|money }}</td><td class="text-end">{{ r.collected|money }}</td></tr>{% endfor %}</tbody>
+  </table></div></div></div>
+  <div class="col-xl-5"><div class="ks-card p-0"><div class="ks-card-title p-3 pb-0"><span>Outstanding balances</span><span class="ks-pill ks-pill--bougain">{{ outstanding_total|money }}</span></div><div class="table-responsive"><table class="ks-table">
+    <tbody>{% for b in outstanding %}<tr><td><a href="{% url 'dashboard:booking' b.pk %}">{{ b.reference }}</a><div class="ks-small ks-muted">{{ b.guest.full_name }} · Apt {{ b.apartment.number }}</div></td><td class="ks-small">{{ b.check_in|date:"j M" }}</td><td class="text-end text-danger fw-semibold">{{ b.balance|money }}</td></tr>{% empty %}<tr><td class="ks-empty">Everyone is paid up.</td></tr>{% endfor %}</tbody>
+  </table></div></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ daily_labels|json_script:"occ-l" }}{{ daily_occ|json_script:"occ-v" }}
+<script>
+new Chart(document.getElementById("occ"), {
+  type: "line",
+  data: { labels: JSON.parse(document.getElementById("occ-l").textContent),
+          datasets: [{ data: JSON.parse(document.getElementById("occ-v").textContent), borderColor: "#0E6A78", backgroundColor: "rgba(14,106,120,.12)", fill: true, tension: .3, pointRadius: 2 }] },
+  options: { plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + "%" }, grid: { color: "#EAF2F1" } }, x: { grid: { display: false } } } }
+});
+</script>
+{% endblock %}

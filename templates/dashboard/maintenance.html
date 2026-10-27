@@ -1,0 +1,48 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Maintenance{% endblock %}
+{% block heading %}Maintenance{% endblock %}
+{% block actions %}<button class="btn btn-ks" data-bs-toggle="collapse" data-bs-target="#newTicket"><i class="bi bi-plus-lg"></i> Log an issue</button>{% endblock %}
+{% block content %}
+<div class="collapse {% if not tickets %}show{% endif %} mb-4" id="newTicket">
+  <form method="post" class="ks-card row g-3 mx-0">
+    {% csrf_token %}<input type="hidden" name="action" value="create">
+    <div class="col-md-3"><label class="form-label" for="apartment">Apartment</label><select id="apartment" name="apartment" class="form-select" required><option value="">Choose…</option>{% for a in apartments %}<option value="{{ a.pk }}">{{ a.number }} – {{ a.name }}</option>{% endfor %}</select></div>
+    <div class="col-md-6"><label class="form-label" for="title">Issue</label><input id="title" name="title" class="form-control" placeholder="e.g. AC in bedroom not cooling" required></div>
+    <div class="col-md-3"><label class="form-label" for="priority">Priority</label><select id="priority" name="priority" class="form-select">{% for v, l in priorities %}<option value="{{ v }}" {% if v == 'normal' %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div class="col-12"><label class="form-label" for="description">Details</label><textarea id="description" name="description" rows="2" class="form-control"></textarea></div>
+    <div class="col-md-3"><label class="form-label" for="assigned_to">Assigned to</label><input id="assigned_to" name="assigned_to" class="form-control" placeholder="Technician"></div>
+    <div class="col-md-3"><label class="form-label" for="reported_by">Reported by</label><input id="reported_by" name="reported_by" class="form-control" placeholder="Guest / staff"></div>
+    <div class="col-6 col-md-2"><label class="form-label" for="block_from">Close from</label><input id="block_from" type="date" name="block_from" class="form-control"></div>
+    <div class="col-6 col-md-2"><label class="form-label" for="block_until">Close until</label><input id="block_until" type="date" name="block_until" class="form-control"></div>
+    <div class="col-md-2 d-grid align-self-end"><button class="btn btn-ks">Log issue</button></div>
+    <div class="col-12 ks-small ks-muted mt-0">Closing dates block the apartment on the website calendar until the ticket is resolved.</div>
+  </form>
+</div>
+<div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+  <ul class="nav nav-pills gap-1">
+    <li class="nav-item"><a class="nav-link {% if status == 'active' %}active{% endif %}" href="?status=active">Open &amp; in progress</a></li>
+    <li class="nav-item"><a class="nav-link {% if status == 'resolved' %}active{% endif %}" href="?status=resolved">Resolved</a></li>
+    <li class="nav-item"><a class="nav-link {% if status == '' %}active{% endif %}" href="?status=">All</a></li>
+  </ul>
+  <span class="ks-pill ks-pill--muted fs-6">Spent this month: {{ cost_month|money }}</span>
+</div>
+<div class="row g-3">
+  {% for t in tickets %}
+  <div class="col-md-6 col-xxl-4">
+    <div class="ks-card h-100 d-flex flex-column gap-2" style="border-left: 4px solid {% if t.priority == 'urgent' %}var(--ks-bougain){% elif t.priority == 'high' %}var(--ks-sun){% else %}var(--ks-line){% endif %}">
+      <div class="d-flex justify-content-between gap-2"><span class="ks-plaque position-static" style="font-size:.85rem;padding:.15rem .45rem">{{ t.apartment.number }}</span><div class="d-flex gap-1"><span class="ks-pill {{ t.priority|pill }}">{{ t.get_priority_display }}</span><span class="ks-pill {{ t.status|pill }}">{{ t.get_status_display }}</span></div></div>
+      <strong>{{ t.title }}</strong>
+      {% if t.description %}<div class="ks-small ks-muted">{{ t.description|linebreaksbr }}</div>{% endif %}
+      <div class="ks-small ks-muted">{% if t.assigned_to %}<i class="bi bi-person-gear"></i> {{ t.assigned_to }} · {% endif %}Logged {{ t.created_at|date:"j M" }}{% if t.block_from %} · <i class="bi bi-lock"></i> closed {{ t.block_from|date:"j M" }}–{{ t.block_until|date:"j M" }}{% endif %}</div>
+      <form method="post" class="d-flex gap-2 mt-auto pt-2">
+        {% csrf_token %}<input type="hidden" name="ticket" value="{{ t.pk }}">
+        <select name="status" class="form-select form-select-sm" aria-label="Status">{% for v, l in statuses %}<option value="{{ v }}" {% if t.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+        <input name="cost" type="number" step="0.01" min="0" class="form-control form-control-sm" placeholder="Cost" value="{% if t.cost %}{{ t.cost|floatformat:'2u' }}{% endif %}" style="max-width:110px" aria-label="Cost">
+        <button class="btn btn-sm btn-ks">Save</button>
+      </form>
+    </div>
+  </div>
+  {% empty %}<div class="col-12"><div class="ks-card ks-empty"><i class="bi bi-check2-circle fs-1 text-success"></i><p class="m-0">Nothing broken. Nice.</p></div></div>{% endfor %}
+</div>
+{% endblock %}

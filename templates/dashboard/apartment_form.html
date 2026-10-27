@@ -1,0 +1,85 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if apt.pk and apt.number %}Apt {{ apt.number }}{% else %}New apartment{% endif %}{% endblock %}
+{% block heading %}{% if apt.number %}Edit Apt {{ apt.number }}{% else %}New apartment{% endif %}{% endblock %}
+{% block actions %}{% if apt.number %}<a href="{{ apt.get_absolute_url }}" target="_blank" class="btn btn-ghost"><i class="bi bi-eye"></i> View page</a>{% endif %}{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-xl-8 d-grid gap-4">
+      <div class="ks-card">
+        <div class="ks-card-title">Details</div>
+        <div class="row g-3">
+          <div class="col-sm-3"><label class="form-label" for="number">Apartment number</label><input id="number" name="number" class="form-control" value="{{ apt.number }}" required></div>
+          <div class="col-sm-9"><label class="form-label" for="name">Name</label><input id="name" name="name" class="form-control" value="{{ apt.name }}" placeholder="e.g. Mangrove Suite" required></div>
+          <div class="col-12"><label class="form-label" for="tagline">One-line summary</label><input id="tagline" name="tagline" class="form-control" value="{{ apt.tagline }}" maxlength="160"></div>
+          <div class="col-12"><label class="form-label" for="description">Description</label><textarea id="description" name="description" rows="5" class="form-control">{{ apt.description }}</textarea></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="floor">Floor</label><input id="floor" type="number" min="0" name="floor" class="form-control" value="{{ apt.floor|default:0 }}"></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="bedrooms">Bedrooms</label><input id="bedrooms" type="number" min="0" name="bedrooms" class="form-control" value="{{ apt.bedrooms|default:1 }}"></div>
+          <div class="col-6 col-md-2"><label class="form-label" for="bathrooms">Bathrooms</label><input id="bathrooms" type="number" min="0" name="bathrooms" class="form-control" value="{{ apt.bathrooms|default:1 }}"></div>
+          <div class="col-6 col-md-3"><label class="form-label" for="capacity">Sleeps</label><input id="capacity" type="number" min="1" name="capacity" class="form-control" value="{{ apt.capacity|default:2 }}"></div>
+          <div class="col-6 col-md-3"><label class="form-label" for="size_sqm">Size (m²)</label><input id="size_sqm" type="number" min="0" name="size_sqm" class="form-control" value="{{ apt.size_sqm|default:'' }}"></div>
+        </div>
+      </div>
+
+      <div class="ks-card">
+        <div class="ks-card-title">Photos</div>
+        {% if photos %}
+        <div class="row g-2 mb-3">
+          {% for p in photos %}
+          <div class="col-6 col-md-3">
+            <div class="ks-photo-tile"><img src="{{ p.image.url }}" alt="">
+              <div class="ctrl">
+                <label><input type="radio" name="cover" value="{{ p.pk }}" {% if p.is_cover %}checked{% endif %}> Cover</label>
+                <label><input type="checkbox" name="delete_photo" value="{{ p.pk }}"> Delete</label>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="ks-dropzone" data-input="photos" role="button" tabindex="0">
+          <i class="bi bi-cloud-arrow-up fs-2"></i><div class="fw-semibold">Drop photos here or click to choose</div><div class="ks-small">JPG or PNG, several at once is fine</div><div class="ks-drop-list ks-small mt-2"></div>
+        </div>
+        <input type="file" id="photos" name="photos" accept="image/*" multiple class="d-none">
+      </div>
+
+      <div class="ks-card">
+        <div class="ks-card-title">Amenities</div>
+        <div class="row g-2">
+          {% for a in amenities %}
+          <div class="col-6 col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="amenities" value="{{ a.id }}" id="a{{ forloop.counter }}" {% if a.id in selected %}checked{% endif %}><label class="form-check-label" for="a{{ forloop.counter }}"><i class="bi bi-{{ a.icon }} me-1"></i>{{ a.name }}</label></div></div>
+          {% endfor %}
+        </div>
+        <div class="row g-2 mt-2">
+          <div class="col-sm-7"><input name="new_amenity" class="form-control" placeholder="Add a new amenity, e.g. Rooftop terrace"></div>
+          <div class="col-sm-5"><input name="new_amenity_icon" class="form-control" placeholder="Icon name, e.g. sun"></div>
+        </div>
+        <div class="ks-small ks-muted mt-1">Icon names come from <a href="https://icons.getbootstrap.com" target="_blank" rel="noopener">Bootstrap Icons</a>.</div>
+      </div>
+    </div>
+
+    <div class="col-xl-4 d-grid gap-4 align-content-start">
+      <div class="ks-card">
+        <div class="ks-card-title">Rates</div>
+        <div class="d-grid gap-3">
+          <div><label class="form-label" for="daily_rate">Per night ({{ site.currency_symbol }})</label><input id="daily_rate" type="number" step="0.01" min="0" name="daily_rate" class="form-control" value="{{ apt.daily_rate|floatformat:'2u' }}" required></div>
+          <div><label class="form-label" for="monthly_rate">Per month ({{ site.currency_symbol }}) <span class="ks-muted fw-normal">optional</span></label><input id="monthly_rate" type="number" step="0.01" min="0" name="monthly_rate" class="form-control" value="{{ apt.monthly_rate|floatformat:'2u'|default:'' }}"><div class="ks-small ks-muted">Used for stays of 30+ nights</div></div>
+          <div><label class="form-label" for="cleaning_fee">Cleaning fee per stay</label><input id="cleaning_fee" type="number" step="0.01" min="0" name="cleaning_fee" class="form-control" value="{{ apt.cleaning_fee|floatformat:'2u' }}"></div>
+          <div><label class="form-label" for="deposit_percent">Deposit to confirm (%)</label><input id="deposit_percent" type="number" min="0" max="100" name="deposit_percent" class="form-control" value="{{ apt.deposit_percent|default:30 }}"></div>
+        </div>
+      </div>
+      <div class="ks-card">
+        <div class="ks-card-title">Visibility</div>
+        <div class="d-grid gap-3">
+          <select name="status" class="form-select" aria-label="Status">{% for v, l in statuses %}<option value="{{ v }}" {% if apt.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+          <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="is_featured" id="is_featured" {% if apt.is_featured %}checked{% endif %}><label class="form-check-label" for="is_featured">Show on the home page</label></div>
+          <div class="d-flex align-items-center gap-2"><input type="color" name="accent" value="{{ apt.accent|default:'#0B4F5C' }}" class="form-control form-control-color" id="accent"><label for="accent" class="form-label m-0">Unit colour</label></div>
+        </div>
+      </div>
+      <button class="btn btn-ks btn-lg"><i class="bi bi-check2"></i> Save apartment</button>
+      {% if apt.number %}<button class="btn btn-link text-danger" name="action" value="delete" formnovalidate onclick="return confirm('Delete Apt {{ apt.number }}? Units with bookings are hidden instead.')">Delete apartment</button>{% endif %}
+    </div>
+  </div>
+</form>
+{% endblock %}

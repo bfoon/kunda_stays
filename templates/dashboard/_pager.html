@@ -1,0 +1,10 @@
+{% load stays_tags %}
+{% if page.paginator.num_pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center mt-3 ks-small">
+  <span class="ks-muted">Page {{ page.number }} of {{ page.paginator.num_pages }} · {{ page.paginator.count }} total</span>
+  <div class="btn-group">
+    {% if page.has_previous %}<a class="btn btn-sm btn-ghost" href="{% qs page=page.previous_page_number %}">Previous</a>{% endif %}
+    {% if page.has_next %}<a class="btn btn-sm btn-ghost" href="{% qs page=page.next_page_number %}">Next</a>{% endif %}
+  </div>
+</nav>
+{% endif %}

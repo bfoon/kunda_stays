@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Contact &amp; directions · {{ site.name }}{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="row g-5">
+    <div class="col-lg-5">
+      <h1 class="h2">Talk to a real person</h1>
+      <p class="ks-muted">WhatsApp is the fastest way to reach us — day or night for guests in-house.</p>
+      <div class="d-grid gap-2 mb-4">
+        <a class="btn btn-wa btn-lg" href="{{ site.whatsapp_link }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i> Chat on WhatsApp</a>
+        <a class="btn btn-ghost" href="tel:{{ site.phone }}"><i class="bi bi-telephone me-1"></i> {{ site.phone }}</a>
+        <a class="btn btn-ghost" href="mailto:{{ site.email }}"><i class="bi bi-envelope me-1"></i> {{ site.email }}</a>
+      </div>
+      <form method="post" class="ks-card d-grid gap-3">
+        {% csrf_token %}
+        <h2 class="h5 m-0">Or leave a message</h2>
+        <div class="row g-2">
+          <div class="col-sm-6"><label class="form-label" for="name">Name</label><input id="name" name="name" class="form-control" required></div>
+          <div class="col-sm-6"><label class="form-label" for="phone">Phone</label><input id="phone" name="phone" class="form-control" inputmode="tel"></div>
+        </div>
+        <div><label class="form-label" for="email">Email</label><input id="email" name="email" type="email" class="form-control"></div>
+        <div><label class="form-label" for="apartment">About an apartment?</label><select id="apartment" name="apartment" class="form-select"><option value="">General question</option>{% for a in apartments %}<option value="{{ a.id }}">Apt {{ a.number }} – {{ a.name }}</option>{% endfor %}</select></div>
+        <div><label class="form-label" for="message">Message</label><textarea id="message" name="message" rows="4" class="form-control" required></textarea></div>
+        <input type="text" name="website" class="d-none" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-ks">Send message</button>
+      </form>
+    </div>
+    <div class="col-lg-7">
+      <iframe class="ks-map" style="height:520px" src="{{ site.maps_embed }}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+        <span class="ks-muted"><i class="bi bi-geo-alt me-1"></i>{{ site.address }}</span>
+        <a class="btn btn-ks" href="{{ site.maps_link }}" target="_blank" rel="noopener"><i class="bi bi-sign-turn-right me-1"></i> Directions in Google Maps</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

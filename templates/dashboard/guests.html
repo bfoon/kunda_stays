@@ -1,0 +1,11 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Guests{% endblock %}
+{% block heading %}Guests{% endblock %}
+{% block content %}
+<form class="mb-3" style="max-width:420px"><div class="input-group"><input name="q" class="form-control" value="{{ q }}" placeholder="Name, phone or email"><button class="btn btn-ks"><i class="bi bi-search"></i></button></div></form>
+<div class="ks-card p-0"><div class="table-responsive"><table class="ks-table">
+  <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Country</th><th class="text-end">Stays</th></tr></thead>
+  <tbody>{% for g in page %}<tr><td><a href="{% url 'dashboard:guest' g.pk %}">{{ g.full_name }}</a></td><td>{{ g.phone }}</td><td>{{ g.email|default:"—" }}</td><td>{{ g.country|default:"—" }}</td><td class="text-end">{{ g.stays }}</td></tr>{% empty %}<tr><td colspan="5" class="ks-empty">No guests yet.</td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% include "dashboard/_pager.html" %}
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load stays_tags %}
+{% block title %}Apartments — {{ site.name }}{% endblock %}
+{% block content %}
+<section class="ks-section pt-4">
+  <div class="container">
+    <div class="ks-section-head">
+      <div>
+        <h1 class="h2 mb-1">{% if dated %}{{ available_count }} apartment{{ available_count|pluralize }} free{% else %}Apartments{% endif %}</h1>
+        <p>{% if dated %}{{ check_in|date:"D j M" }} to {{ check_out|date:"D j M Y" }}{% if guests %}, {{ guests }} guest{{ guests|pluralize }}{% endif %}. Prices include cleaning.{% else %}Add dates to see live availability and your exact price.{% endif %}</p>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-ghost d-lg-none" data-bs-toggle="offcanvas" data-bs-target="#filters"><i class="bi bi-sliders"></i> Filters</button>
+        <select class="form-select w-auto" onchange="location.search=new URLSearchParams({...Object.fromEntries(new URLSearchParams(location.search)), sort:this.value})" aria-label="Sort">
+          <option value="number" {% if sort == 'number' %}selected{% endif %}>Sort by number</option>
+          <option value="price" {% if sort == 'price' %}selected{% endif %}>Price: low to high</option>
+          <option value="-price" {% if sort == '-price' %}selected{% endif %}>Price: high to low</option>
+          <option value="capacity" {% if sort == 'capacity' %}selected{% endif %}>Most guests</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-4">
+      <div class="col-lg-3">
+        <div class="offcanvas-lg offcanvas-start" tabindex="-1" id="filters">
+          <div class="offcanvas-header"><h5 class="offcanvas-title">Filters</h5><button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#filters" aria-label="Close"></button></div>
+          <div class="offcanvas-body">
+            <form method="get" class="ks-card w-100 d-grid gap-3">
+              <div>
+                <label class="form-label" for="dates">Dates</label>
+                <input id="dates" class="form-control" data-range-picker placeholder="Arrival — departure" readonly>
+                <input type="hidden" name="check_in" value="{{ check_in|date:'Y-m-d' }}"><input type="hidden" name="check_out" value="{{ check_out|date:'Y-m-d' }}">
+              </div>
+              <div class="row g-2">
+                <div class="col-6"><label class="form-label" for="g">Guests</label><input id="g" type="number" min="1" name="guests" class="form-control" value="{{ guests|default:'' }}"></div>
+                <div class="col-6"><label class="form-label" for="b">Bedrooms</label><input id="b" type="number" min="1" name="bedrooms" class="form-control" value="{{ bedrooms|default:'' }}"></div>
+              </div>
+              <div><label class="form-label" for="mr">Max per night ({{ site.currency_symbol }})</label><input id="mr" type="number" min="0" step="100" name="max_rate" class="form-control" value="{{ max_rate|default:'' }}"></div>
+              <div>
+                <span class="form-label d-block">Must have</span>
+                {% for a in amenities %}
+                <div class="form-check"><input class="form-check-input" type="checkbox" name="amenity" value="{{ a.id }}" id="am{{ forloop.counter }}" {% if a.id|stringformat:"s" in selected_amenities %}checked{% endif %}><label class="form-check-label" for="am{{ forloop.counter }}"><i class="bi bi-{{ a.icon }} me-1 ks-muted"></i>{{ a.name }}</label></div>
+                {% endfor %}
+              </div>
+              <input type="hidden" name="sort" value="{{ sort }}">
+              <button class="btn btn-ks">Show apartments</button>
+              <a href="{% url 'stays:apartments' %}" class="btn btn-link btn-sm">Clear filters</a>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-9">
+        <div class="row g-4">
+          {% for r in results %}
+          <div class="col-md-6 col-xl-4">{% with apt=r.apt available=r.available quote=r.quote %}{% include "stays/_apt_card.html" %}{% endwith %}</div>
+          {% empty %}
+          <div class="col-12"><div class="ks-card text-center py-5"><i class="bi bi-door-closed fs-1 ks-muted"></i><h3 class="mt-2">No apartments match</h3><p class="ks-muted mx-auto">Try fewer filters, or message us — we often have a unit opening up soon.</p><a class="btn btn-wa" href="{{ site.whatsapp_link }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Ask on WhatsApp</a></div></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

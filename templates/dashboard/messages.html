@@ -1,0 +1,51 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Messages{% endblock %}
+{% block heading %}Messages{% endblock %}
+{% block actions %}
+<form method="post">{% csrf_token %}<button name="action" value="run_reminders" class="btn btn-ghost"><i class="bi bi-bell"></i> Prepare today's reminders</button></form>
+{% endblock %}
+{% block content %}
+<ul class="nav nav-pills mb-3 gap-1">
+  <li class="nav-item"><a class="nav-link {% if tab == 'outbox' %}active{% endif %}" href="?tab=outbox">Ready to send {% if outbox_count %}<span class="badge text-bg-warning">{{ outbox_count }}</span>{% endif %}</a></li>
+  <li class="nav-item"><a class="nav-link {% if tab == 'all' %}active{% endif %}" href="?tab=all">All WhatsApp</a></li>
+  <li class="nav-item"><a class="nav-link {% if tab == 'inquiries' %}active{% endif %}" href="?tab=inquiries">Website enquiries {% if unhandled %}<span class="badge text-bg-danger">{{ unhandled }}</span>{% endif %}</a></li>
+</ul>
+{% if tab == 'inquiries' %}
+<div class="d-grid gap-3">
+  {% for i in inquiries %}
+  <div class="ks-card {% if i.handled %}opacity-75{% endif %}">
+    <div class="d-flex flex-wrap justify-content-between gap-2"><div><strong>{{ i.name }}</strong> <span class="ks-small ks-muted">{{ i.created_at|date:"j M H:i" }}{% if i.apartment %} · about Apt {{ i.apartment.number }}{% endif %}</span></div>
+      <div class="d-flex gap-1">
+        {% if i.phone %}<a class="btn btn-sm btn-wa" target="_blank" rel="noopener" href="{% wa i.phone 'Hello '|add:i.name|add:', thanks for your message to '|add:site.name|add:'. ' %}"><i class="bi bi-whatsapp"></i> Reply</a>{% endif %}
+        {% if i.email %}<a class="btn btn-sm btn-ghost" href="mailto:{{ i.email }}"><i class="bi bi-envelope"></i></a>{% endif %}
+        {% if not i.handled %}<form method="post">{% csrf_token %}<input type="hidden" name="inquiry" value="{{ i.pk }}"><button name="action" value="handled" class="btn btn-sm btn-ghost">Mark handled</button></form>{% endif %}
+      </div>
+    </div>
+    <p class="mb-0 mt-2">{{ i.message|linebreaksbr }}</p>
+  </div>
+  {% empty %}<div class="ks-card ks-empty">No enquiries yet.</div>{% endfor %}
+</div>
+{% else %}
+{% if tab == 'outbox' and outbox_count %}
+<div class="alert alert-light border d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <span class="ks-small"><i class="bi bi-info-circle"></i> WhatsApp Cloud API isn't configured, so messages are prepared here. Tap <strong>Open WhatsApp</strong> to send each one with the text filled in.</span>
+  <form method="post">{% csrf_token %}<button name="action" value="mark_all_sent" class="btn btn-sm btn-ghost">Mark all as sent</button></form>
+</div>
+{% endif %}
+<div class="d-grid gap-2">
+  {% for m in logs %}
+  <div class="ks-card py-3">
+    <div class="d-flex flex-wrap justify-content-between gap-2">
+      <div class="min-w-0"><strong>{{ m.get_kind_display }}</strong> → {{ m.to }}{% if m.booking %} · <a href="{% url 'dashboard:booking' m.booking.pk %}">{{ m.booking.reference }}</a> {{ m.booking.guest.full_name }}{% endif %}<div class="ks-small ks-muted">{{ m.created_at|date:"j M H:i" }}</div></div>
+      <div class="d-flex gap-1 align-items-start"><span class="ks-pill {{ m.status|pill }}">{{ m.get_status_display }}</span>
+        {% if m.status != 'sent' %}<a class="btn btn-sm btn-wa" href="{{ m.wa_link }}" target="_blank" rel="noopener">Open WhatsApp</a><form method="post">{% csrf_token %}<input type="hidden" name="message" value="{{ m.pk }}"><button name="action" value="mark_sent" class="btn btn-sm btn-ghost" title="Mark as sent"><i class="bi bi-check2-all"></i></button></form>{% endif %}
+      </div>
+    </div>
+    <details class="mt-2"><summary class="ks-small">Message text</summary><pre class="ks-small mt-2 mb-0" style="white-space:pre-wrap;font-family:inherit">{{ m.body }}</pre>{% if m.error %}<div class="text-danger ks-small">{{ m.error }}</div>{% endif %}</details>
+  </div>
+  {% empty %}<div class="ks-card ks-empty">{% if tab == 'outbox' %}All caught up — nothing waiting to be sent.{% else %}No messages yet.{% endif %}</div>{% endfor %}
+</div>
+{% with page=logs %}{% include "dashboard/_pager.html" %}{% endwith %}
+{% endif %}
+{% endblock %}

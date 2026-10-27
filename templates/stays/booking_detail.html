@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load stays_tags %}
+{% block title %}Booking {{ b.reference }} · {{ site.name }}{% endblock %}
+{% block content %}
+<div class="container py-4 py-lg-5" style="max-width:1080px">
+  <div class="ks-ticket mb-4">
+    <div class="ks-ticket-main">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+          <small class="ks-muted fw-semibold">Booking reference</small>
+          <div class="ks-ref">{{ b.reference }}</div>
+        </div>
+        <span class="ks-pill {{ b.status|pill }} fs-6">{{ b.get_status_display }}</span>
+      </div>
+      <div class="ks-trip">
+        <div class="ks-trip-date"><small>Check-in</small><strong>{{ b.check_in|date:"D j M" }}</strong><div class="ks-small ks-muted">from {{ site.checkin_time }}</div></div>
+        <div class="ks-trip-line">{{ b.nights }} night{{ b.nights|pluralize }}</div>
+        <div class="ks-trip-date text-end"><small>Check-out</small><strong>{{ b.check_out|date:"D j M" }}</strong><div class="ks-small ks-muted">by {{ site.checkout_time }}</div></div>
+      </div>
+      <div class="d-flex flex-wrap gap-3 align-items-center">
+        <span class="ks-plaque position-static">{{ b.apartment.number }}</span>
+        <div><strong>{{ b.apartment.name }}</strong><div class="ks-small ks-muted">{{ b.guest.full_name }} · {{ b.adults }} adult{{ b.adults|pluralize }}{% if b.children %}, {{ b.children }} child{{ b.children|pluralize:"ren" }}{% endif %}</div></div>
+      </div>
+      {% if b.status != 'cancelled' and b.status != 'no_show' %}
+      <ol class="ks-timeline mt-4">{% for label, done in steps %}<li class="{% if done %}done{% endif %}">{{ label }}</li>{% endfor %}</ol>
+      {% endif %}
+    </div>
+    <div class="ks-ticket-stub">
+      {{ qr|safe }}
+      <small class="text-center" style="color:#CFE5E8">Show at reception</small>
+    </div>
+  </div>
+
+  {% if b.hold_seconds_left is not None %}
+  <div class="ks-hold mb-4"><i class="bi bi-hourglass-split fs-4"></i><div>Apt {{ b.apartment.number }} is held for you for <strong data-countdown="{{ b.hold_seconds_left }}"></strong>. Pay the deposit of <strong>{{ b.deposit_outstanding|money }}</strong> to confirm.</div></div>
+  {% endif %}
+
+  <div class="row g-4">
+    <div class="col-lg-7" id="pay">
+      <div class="ks-card mb-4">
+        <div class="ks-card-title"><span>Payment</span><span class="ks-pill {{ b.payment_state|pill }}">{% if b.payment_state == 'paid' %}Fully paid{% elif b.payment_state == 'partial' %}Part paid{% else %}Not paid yet{% endif %}</span></div>
+        <div class="d-flex justify-content-between ks-small mb-1"><span>Paid {{ b.amount_paid|money }}</span><span>Total {{ b.total_amount|money }}</span></div>
+        <div class="ks-progress mb-3"><div style="width: {{ b.paid_percent }}%"></div></div>
+        <div class="row g-3 text-center mb-2">
+          <div class="col-4"><small class="ks-muted d-block">Deposit</small><strong>{{ b.deposit_required|money }}</strong></div>
+          <div class="col-4"><small class="ks-muted d-block">Paid</small><strong>{{ b.amount_paid|money }}</strong></div>
+          <div class="col-4"><small class="ks-muted d-block">Balance</small><strong class="{% if b.balance %}text-danger{% endif %}">{{ b.balance|money }}</strong></div>
+        </div>
+
+        {% if b.is_active and b.balance > 0 %}
+        <hr>
+        {% for p in b.pending_payments %}<div class="alert alert-light border ks-small"><i class="bi bi-hourglass-split"></i> We're checking your {{ p.get_method_display }} payment of <strong>{{ p.amount|money }}</strong>{% if p.reference %} (ref {{ p.reference }}){% endif %}. Your receipt will arrive on WhatsApp.</div>{% endfor %}
+        <h3 class="h6 fw-bold">1. Send money to one of these</h3>
+        <div class="d-grid gap-2 mb-3">
+          {% for m in methods %}
+          <div class="ks-method"><div><strong>{{ m.label }}</strong><br><code>{{ m.detail }}</code></div><button type="button" class="btn btn-sm btn-ghost" data-copy="{{ m.detail }}"><i class="bi bi-clipboard"></i> Copy</button></div>
+          {% endfor %}
+          <div class="ks-method"><div><strong>Cash</strong><br><span class="ks-small ks-muted">At reception, {{ site.address }}</span></div></div>
+        </div>
+        <p class="ks-small ks-muted">Use <strong>{{ b.reference }}</strong> as the payment note.</p>
+        <h3 class="h6 fw-bold">2. Tell us you've paid</h3>
+        <form method="post" class="row g-2">
+          {% csrf_token %}<input type="hidden" name="action" value="submit_payment">
+          <div class="col-sm-4"><label class="form-label" for="amount">Amount ({{ site.currency_symbol }})</label><input id="amount" name="amount" type="number" step="0.01" min="1" class="form-control" value="{{ suggested_amount|floatformat:'2u' }}" required></div>
+          <div class="col-sm-4"><label class="form-label" for="method">Paid with</label><select id="method" name="method" class="form-select">{% for m in methods %}<option value="{{ m.key }}">{{ m.label }}</option>{% endfor %}<option value="cash">Cash</option></select></div>
+          <div class="col-sm-4"><label class="form-label" for="reference">Transaction ID</label><input id="reference" name="reference" class="form-control" placeholder="From your SMS"></div>
+          <div class="col-12 d-grid"><button class="btn btn-ks"><i class="bi bi-send-check me-1"></i> Submit payment for verification</button></div>
+        </form>
+        {% endif %}
+      </div>
+
+      <div class="ks-card">
+        <div class="ks-card-title"><span>Payments &amp; receipts</span><a class="btn btn-sm btn-ghost" href="{% url 'stays:statement' b.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> Statement</a></div>
+        {% if payments %}
+        <div class="table-responsive"><table class="ks-table">
+          <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Status</th><th></th></tr></thead>
+          <tbody>{% for p in payments %}<tr>
+            <td class="text-nowrap">{{ p.paid_at|default:p.created_at|date:"j M Y" }}</td>
+            <td class="text-nowrap">{% if p.kind == 'refund' %}−{% endif %}{{ p.amount|money }}</td>
+            <td>{{ p.get_method_display }}</td>
+            <td><span class="ks-pill {{ p.status|pill }}">{{ p.get_status_display }}</span></td>
+            <td class="text-end">{% if p.status == 'confirmed' %}<a href="{% url 'stays:receipt' p.pk %}" target="_blank" class="btn btn-sm btn-ghost"><i class="bi bi-receipt"></i> {{ p.receipt_number }}</a>{% endif %}</td>
+          </tr>{% endfor %}</tbody>
+        </table></div>
+        {% else %}<div class="ks-empty">Receipts appear here as soon as a payment is confirmed.</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="ks-card mb-4">
+        <div class="ks-card-title">Price breakdown</div>
+        <div class="ks-quote">
+          <div class="ks-quote-row"><span>{{ b.nights }} night{{ b.nights|pluralize }} · {{ b.get_rate_plan_display|lower }}</span><span>{{ b.subtotal|money }}</span></div>
+          {% if b.cleaning_fee %}<div class="ks-quote-row"><span>Cleaning fee</span><span>{{ b.cleaning_fee|money }}</span></div>{% endif %}
+          {% if b.discount %}<div class="ks-quote-row text-success"><span>Discount</span><span>− {{ b.discount|money }}</span></div>{% endif %}
+          <div class="ks-quote-row ks-quote-total"><span>Total</span><span>{{ b.total_amount|money }}</span></div>
+        </div>
+      </div>
+      <div class="ks-card mb-4">
+        <div class="ks-card-title">Need anything?</div>
+        <div class="d-grid gap-2">
+          <a class="btn btn-wa" href="{% wa site.whatsapp wa_text %}" target="_blank" rel="noopener"><i class="bi bi-whatsapp me-1"></i> Message us about this booking</a>
+          <a class="btn btn-ghost" href="{{ site.maps_link }}" target="_blank" rel="noopener"><i class="bi bi-sign-turn-right me-1"></i> Directions</a>
+          <a class="btn btn-ghost" href="{% url 'stays:ics' b.pk %}"><i class="bi bi-calendar-plus me-1"></i> Add to calendar</a>
+          <button class="btn btn-ghost" type="button" data-copy="{{ request.build_absolute_uri }}"><i class="bi bi-link-45deg me-1"></i> Copy booking link</button>
+        </div>
+      </div>
+      <iframe class="ks-map mb-4" src="{{ site.maps_embed }}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe>
+      {% if b.can_guest_cancel %}
+      <form method="post" onsubmit="return confirm('Cancel booking {{ b.reference }} and release the dates?')">
+        {% csrf_token %}<input type="hidden" name="action" value="cancel">
+        <button class="btn btn-link text-danger p-0">Cancel this booking</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

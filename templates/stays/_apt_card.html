@@ -1,0 +1,33 @@
+{% load stays_tags %}
+<a class="ks-apt" href="{{ apt.get_absolute_url }}{% if check_in and check_out %}?check_in={{ check_in|date:'Y-m-d' }}&check_out={{ check_out|date:'Y-m-d' }}{% endif %}">
+  <div class="ks-apt-media">
+    {% with c=apt.cover %}
+    {% if c %}<img src="{{ c.image.url }}" alt="{{ c.caption|default:apt.name }}" loading="lazy">
+    {% else %}<div class="ks-placeholder" style="background:{{ apt.accent }}">{{ apt.number }}</div>{% endif %}
+    {% endwith %}
+    <span class="ks-plaque">{{ apt.number }}</span>
+    <span class="ks-apt-flag">
+      {% if available is True %}<span class="ks-pill ks-pill--mangrove"><i class="bi bi-check2"></i> Free for your dates</span>
+      {% elif available is False %}<span class="ks-pill ks-pill--bougain">Taken for these dates</span>
+      {% elif apt.status == 'maintenance' %}<span class="ks-pill ks-pill--sun">Reopening soon</span>{% endif %}
+    </span>
+  </div>
+  <div class="ks-apt-body">
+    <h3>{{ apt.name }}</h3>
+    {% if apt.tagline %}<p class="ks-muted ks-small mb-0">{{ apt.tagline }}</p>{% endif %}
+    <div class="ks-facts">
+      <span><i class="bi bi-people"></i>{{ apt.capacity }} guests</span>
+      <span><i class="bi bi-door-closed"></i>{{ apt.bedrooms }} bed{{ apt.bedrooms|pluralize }}</span>
+      <span><i class="bi bi-droplet"></i>{{ apt.bathrooms }} bath</span>
+      {% if apt.size_sqm %}<span><i class="bi bi-arrows-angle-expand"></i>{{ apt.size_sqm }} m²</span>{% endif %}
+    </div>
+    <div class="ks-price">
+      {% if quote %}
+        <div><strong>{{ quote.total|money }}</strong> <span>for {{ quote.nights }} night{{ quote.nights|pluralize }}</span></div>
+      {% else %}
+        <div><strong>{{ apt.daily_rate|money }}</strong> <span>/ night</span></div>
+        {% if apt.monthly_rate %}<span>{{ apt.monthly_rate|money }} / month</span>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+</a>

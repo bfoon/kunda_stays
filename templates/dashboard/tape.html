@@ -1,0 +1,49 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Occupancy{% endblock %}
+{% block heading %}Occupancy chart{% endblock %}
+{% block actions %}
+<div class="btn-group">
+  <a class="btn btn-ghost" href="?start={{ prev|date:'Y-m-d' }}&days={{ days }}" aria-label="Earlier"><i class="bi bi-chevron-left"></i></a>
+  <a class="btn btn-ghost" href="?days={{ days }}">Today</a>
+  <a class="btn btn-ghost" href="?start={{ next|date:'Y-m-d' }}&days={{ days }}" aria-label="Later"><i class="bi bi-chevron-right"></i></a>
+</div>
+<div class="btn-group">
+  <a class="btn {% if days == 14 %}btn-ks{% else %}btn-ghost{% endif %}" href="?start={{ start|date:'Y-m-d' }}&days=14">14 days</a>
+  <a class="btn {% if days == 30 %}btn-ks{% else %}btn-ghost{% endif %}" href="?start={{ start|date:'Y-m-d' }}&days=30">30 days</a>
+</div>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap gap-3 ks-small mb-3">
+  <span><span class="ks-bar ks-bar--pending d-inline-flex" style="height:14px;width:28px;padding:0"></span> Awaiting deposit</span>
+  <span><span class="ks-bar ks-bar--confirmed d-inline-flex" style="height:14px;width:28px;padding:0"></span> Confirmed</span>
+  <span><span class="ks-bar ks-bar--checked_in d-inline-flex" style="height:14px;width:28px;padding:0"></span> In house</span>
+  <span><span class="ks-bar ks-bar--checked_out d-inline-flex" style="height:14px;width:28px;padding:0"></span> Checked out</span>
+  <span><span class="ks-bar ks-bar--block d-inline-flex" style="height:14px;width:28px;padding:0"></span> Maintenance</span>
+  <span class="ks-muted"><span class="d-inline-block rounded-circle" style="width:8px;height:8px;background:var(--ks-sun)"></span> balance owed · click an empty night to book it</span>
+</div>
+<div class="ks-tape-wrap">
+  <div class="ks-tape" style="--days: {{ days }}">
+    <div class="ks-tape-row ks-tape-head">
+      <div class="ks-tape-label"><small>{{ start|date:"F Y" }}</small></div>
+      {% for d in dates %}<div class="ks-tape-cell {% if d.weekday >= 5 %}weekend{% endif %} {% if d == today %}today{% endif %}" style="grid-column: {{ forloop.counter|add:1 }}">{{ d|date:"D" }}<strong>{{ d|date:"j" }}</strong></div>{% endfor %}
+    </div>
+    {% for r in rows %}
+    <div class="ks-tape-row">
+      <div class="ks-tape-label"><strong>{{ r.apt.number }}</strong><small>{{ r.apt.name|truncatechars:18 }}</small></div>
+      {% for d in dates %}<a class="ks-tape-cell {% if d.weekday >= 5 %}weekend{% endif %} {% if d == today %}today{% endif %}" style="grid-column: {{ forloop.counter|add:1 }}" href="{% url 'dashboard:booking_new' %}?apartment={{ r.apt.pk }}&check_in={{ d|date:'Y-m-d' }}" aria-label="Book Apt {{ r.apt.number }} from {{ d|date:'j M' }}"></a>{% endfor %}
+      {% for bar in r.bars %}
+        {% if bar.ticket %}
+        <span class="ks-bar ks-bar--block" style="grid-column: {{ bar.col }} / span {{ bar.span }}" title="{{ bar.ticket.title }}"><i class="bi bi-tools"></i> {{ bar.ticket.title }}</span>
+        {% else %}
+        <a class="ks-bar ks-bar--{{ bar.b.status }} {% if bar.cut_left %}cut-left{% endif %} {% if bar.cut_right %}cut-right{% endif %}" style="grid-column: {{ bar.col }} / span {{ bar.span }}" href="{% url 'dashboard:booking' bar.b.pk %}" title="{{ bar.b.reference }} · {{ bar.b.guest.full_name }} · {{ bar.b.check_in|date:'j M' }}–{{ bar.b.check_out|date:'j M' }}">
+          {% if bar.b.balance and bar.b.status != 'pending' %}<span class="owe"></span>{% endif %}{{ bar.b.guest.full_name }}
+        </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% empty %}<div class="ks-empty">Add apartments to see the chart.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

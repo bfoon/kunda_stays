@@ -4,9 +4,17 @@ from celery import shared_task
 from django.utils import timezone
 
 
+def _fresh_profile():
+    """Workers don't go through middleware: pick up business details edited in the portal."""
+    from .middleware import apply_property_profile
+
+    apply_property_profile()
+
+
 @shared_task
 def release_expired_holds():
     """Cancel website bookings whose deposit hold ran out, so the dates reopen."""
+    _fresh_profile()
     from . import messages_text, whatsapp
     from .models import Booking
 
@@ -27,6 +35,7 @@ def release_expired_holds():
 @shared_task
 def send_payment_reminders(days_ahead=3):
     """Remind guests with a balance whose arrival is within `days_ahead` days."""
+    _fresh_profile()
     from . import messages_text, whatsapp
     from .models import Booking
 
@@ -47,6 +56,7 @@ def send_payment_reminders(days_ahead=3):
 
 @shared_task
 def send_checkin_reminders():
+    _fresh_profile()
     from . import messages_text, whatsapp
     from .models import Booking
 

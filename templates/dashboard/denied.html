@@ -1,0 +1,17 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Not in your role{% endblock %}
+{% block heading %}{% endblock %}
+{% block content %}
+<div class="ks-denied">
+  <span class="ks-hook-empty"><i class="bi bi-key"></i></span>
+  {% if not_staff %}
+  <h2>This account can't open the staff portal</h2>
+  <p class="ks-muted mx-auto">Ask a manager to give you a staff role, then sign in again.</p>
+  <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn btn-ks">Sign out</button></form>
+  {% else %}
+  <h2>That key isn't on your ring</h2>
+  <p class="ks-muted mx-auto">As <strong>{{ role }}</strong> you don't have access to this page. If you need it for your work, ask a manager to change your role.</p>
+  <a href="{% url home %}" class="btn btn-ks"><i class="bi bi-house"></i> Go to my start page</a>
+  {% endif %}
+</div>
+{% endblock %}

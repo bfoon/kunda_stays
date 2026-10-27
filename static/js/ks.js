@@ -90,8 +90,20 @@
     if (!data) { quoteBox.innerHTML = '<p class="ks-muted mb-0">Pick your arrival and departure on the calendar to see the price.</p>'; submit.disabled = true; return; }
     if (data.error) { quoteBox.innerHTML = '<p class="text-danger mb-0">' + data.error + "</p>"; submit.disabled = true; return; }
     const q = data.quote;
-    const rate = q.rate_plan === "monthly" ? "Monthly rate applied" : money(q.nightly_rate) + " × " + q.nights + " night" + (q.nights > 1 ? "s" : "");
-    let html = '<div class="ks-quote-row"><span>' + rate + "</span><span>" + money(q.subtotal) + "</span></div>";
+    const nightsLabel = q.nights + " night" + (q.nights > 1 ? "s" : "");
+    const adj = q.adjustments || [];
+    let html = "";
+    if (q.rate_plan === "monthly") {
+      html += '<div class="ks-quote-row"><span>Monthly rate applied</span><span>' + money(q.subtotal) + "</span></div>";
+    } else if (adj.length) {
+      html += '<div class="ks-quote-row"><span>' + money(q.nightly_rate) + " × " + nightsLabel + "</span><span>" + money(q.base_subtotal) + "</span></div>";
+      adj.forEach((a) => {
+        const n = Number(a.amount);
+        html += '<div class="ks-quote-row' + (n < 0 ? " text-success" : "") + '"><span>' + a.name + "</span><span>" + (n < 0 ? "−" : "+") + money(Math.abs(n)) + "</span></div>";
+      });
+    } else {
+      html += '<div class="ks-quote-row"><span>' + money(q.nightly_rate) + " × " + nightsLabel + "</span><span>" + money(q.subtotal) + "</span></div>";
+    }
     if (Number(q.savings) > 0) html += '<div class="ks-quote-row text-success"><span>You save with monthly pricing</span><span>' + money(q.savings) + "</span></div>";
     if (Number(q.cleaning_fee) > 0) html += '<div class="ks-quote-row"><span>Cleaning fee</span><span>' + money(q.cleaning_fee) + "</span></div>";
     html += '<div class="ks-quote-row ks-quote-total"><span>Total</span><span>' + money(q.total) + "</span></div>";
@@ -114,7 +126,8 @@
     booked = data.ranges.map((r) => ({ from: parseYmd(r.from), to: parseYmd(r.to) }));
     const fp = flatpickr("#ks-calendar", {
       inline: true, mode: "range", minDate: "today", dateFormat: "Y-m-d",
-      showMonths: window.innerWidth > 1400 ? 2 : 1,
+      // Two months only when the panel itself has room for them (~300px each), not the window
+      showMonths: document.getElementById("ks-calendar").clientWidth >= 600 ? 2 : 1,
       defaultDate: ci.value && co.value ? [ci.value, co.value] : null,
       disable: [function (d) {
         if (!data.bookable) return true;

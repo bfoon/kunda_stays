@@ -1,0 +1,26 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Logbook{% endblock %}
+{% block heading %}Logbook{% endblock %}
+{% block content %}
+<form method="get" class="ks-card mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-5"><label class="form-label" for="l-q">Search</label><input id="l-q" name="q" class="form-control" value="{{ f.q|default:'' }}" placeholder="Booking reference, apartment, amount…"></div>
+    <div class="col-6 col-md-3"><label class="form-label" for="l-cat">Kind</label><select id="l-cat" name="category" class="form-select"><option value="">Everything</option>{% for v, l in categories %}<option value="{{ v }}" {% if f.category == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-md-3"><label class="form-label" for="l-user">Who</label><select id="l-user" name="user" class="form-select"><option value="">Anyone</option>{% for p in people %}<option value="{{ p.pk }}" {% if f.user == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.get_full_name|default:p.username }}</option>{% endfor %}</select></div>
+    <div class="col-md-1 d-grid"><button class="btn btn-ghost">Go</button></div>
+  </div>
+</form>
+<div class="ks-card">
+  {% for d in days %}
+  <h2 class="ks-log-day">{{ d.day|date:"l j F" }}</h2>
+  {% for e in d.entries %}
+  <div class="ks-log">
+    <time datetime="{{ e.created_at|date:'c' }}">{{ e.created_at|time:"H:i" }}</time>
+    <span class="ic {{ e.category }}"><i class="bi bi-{% if e.category == 'auth' %}door-open{% elif e.category == 'booking' %}journal-bookmark{% elif e.category == 'payment' %}cash-coin{% elif e.category == 'rates' %}tags{% elif e.category == 'finance' %}bank{% elif e.category == 'housekeeping' %}stars{% elif e.category == 'staff' %}person-gear{% else %}building{% endif %}"></i></span>
+    <div>{% if e.link %}<a href="{{ e.link }}" class="text-decoration-none text-reset">{{ e.summary }}</a>{% else %}{{ e.summary }}{% endif %}<br><small>{{ e.who }}{% if e.ip %} · {{ e.ip }}{% endif %}</small></div>
+  </div>
+  {% endfor %}
+  {% empty %}<div class="ks-empty">Nothing logged yet. Sign-ins, bookings, payments, price changes and expenses all appear here automatically.</div>{% endfor %}
+  {% include "dashboard/_pager.html" %}
+</div>
+{% endblock %}

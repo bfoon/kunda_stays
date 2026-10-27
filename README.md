@@ -13,7 +13,7 @@ docker compose up --build
 ```
 
 - Website: http://localhost:8000
-- Dashboard: http://localhost:8000/dashboard/ (login `admin` / `admin12345` — change in `.env`)
+- Staff portal: http://localhost:8000/accounts/login/ (superuser `admin` / `admin12345` — change in `.env`)
 - Django admin: http://localhost:8000/admin/
 
 With `SEED_DEMO=1` the first start loads 8 demo apartments (with generated photos),
@@ -55,6 +55,32 @@ guests, bookings, payments and a maintenance ticket. Set it to `0` for productio
 - Guests with stay history, maintenance tickets that can close a unit's calendar,
   reports (occupancy, ADR, RevPAR, revenue by apartment/method, sources, CSV export)
 
+**Operations portal**
+- Sign-in “key rack”: every apartment is a key tag — on its hook means free tonight. Sign in with
+  username or email, show-password, Caps Lock warning, “keep me signed in”, lockout after
+  `LOGIN_MAX_ATTEMPTS` failures, and a start page chosen by role
+- Roles (Django groups): **Manager** (everything), **Front desk** (bookings, guests, payments, own till,
+  housekeeping, maintenance), **Finance** (payments, finance, expenses, till sign-off, reports, logbook),
+  **Housekeeping** (housekeeping board + maintenance). Superusers are managers; staff with no group are front desk
+- Rates & pricing: stacking price rules (percent / amount / fixed price) by date range, nights of the week,
+  minimum stay and apartment, with presets (high season, festive peak, weekends, rainy season, week-long stays).
+  Month heatmap of the real nightly price, quote checker, bulk rate change, inline base-rate table.
+  Rules feed `quote()`, so the website, walk-ins and date changes all use them; guests see each adjustment
+- Finance: profit & loss by period, 12-month in/out/profit chart, profit by apartment, money owed by age,
+  CSV ledger. Expenses with categories and receipt photos (opens the phone camera)
+- Close the till: count notes per denomination (`CASH_DENOMINATIONS`), float, tick off mobile-money totals
+  against statements, balanced/short/over verdict; finance signs off (never your own)
+- Housekeeping board: phone-first cards sorted by urgency, Dirty → Cleaning → Clean → Ready. Check-out marks
+  the room dirty automatically; Today warns when an arriving guest's room isn't ready
+- Property profile: business details, payment numbers, times, house rules and cancellation policy edited live,
+  with a WhatsApp preview. Overrides `.env` everywhere (pages, receipts, messages, Celery reminders)
+- Staff & roles (one-time readable passwords), Logbook (automatic audit trail via signals), My account,
+  Ctrl+K / “/” search across pages, bookings and guests, photo drag-to-reorder with captions and a listing score
+
+With `SEED_DEMO=1` you also get staff `awa` (front desk), `musa` (finance), `binta` (housekeeping) and
+`ida` (manager), password `DEMO_STAFF_PASSWORD` (default `kunda-demo-2026`), plus starter price rules,
+six months of expenses and a till close. **Change or delete these accounts before going live.**
+
 **WhatsApp**
 - Automatic messages: booking received, confirmed, payment receipt, payment reminder,
   arrival reminder (with map link), hold released
@@ -77,10 +103,12 @@ guests, bookings, payments and a maintenance ticket. Set it to `0` for productio
 config/            settings, urls, celery
 stays/             models, services (pricing/availability/payments), public views,
                    whatsapp, receipts (PDF), tasks, seed_demo command
-dashboard/         staff views (manual POST handling, StaffMixin)
+dashboard/         staff portal: views.py (core), accounts.py (sign-in, staff, logbook, search),
+                   pricing.py, finance.py, operations.py (housekeeping, property profile), roles.py
 templates/         base + stays/* (public) + dashboard/*
 static/css/ks.css  ks-* design system
 static/js/ks.js    calendar, live quote, countdowns, dropzone
+static/js/portal.js  command palette, till counter, photo reorder, rule presets, quote checker
 ```
 
 ## Production notes

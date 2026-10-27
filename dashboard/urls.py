@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import accounts, finance, operations, pricing, views
 
 app_name = "dashboard"
 
@@ -19,4 +19,15 @@ urlpatterns = [
     path("maintenance/", views.MaintenanceView.as_view(), name="maintenance"),
     path("reports/", views.ReportsView.as_view(), name="reports"),
     path("messages/", views.MessagesView.as_view(), name="messages"),
+    # Operations portal
+    path("rates/", pricing.RatesView.as_view(), name="rates"),
+    path("finance/", finance.FinanceView.as_view(), name="finance"),
+    path("finance/expenses/", finance.ExpensesView.as_view(), name="expenses"),
+    path("finance/till/", finance.TillView.as_view(), name="till"),
+    path("housekeeping/", operations.HousekeepingView.as_view(), name="housekeeping"),
+    path("property/", operations.PropertyProfileView.as_view(), name="property"),
+    path("staff/", accounts.StaffView.as_view(), name="staff"),
+    path("logbook/", accounts.LogbookView.as_view(), name="logbook"),
+    path("account/", accounts.AccountView.as_view(), name="account"),
+    path("search.json", accounts.SearchView.as_view(), name="search"),
 ]

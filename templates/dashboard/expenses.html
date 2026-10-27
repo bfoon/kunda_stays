@@ -1,0 +1,67 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Expenses{% endblock %}
+{% block heading %}Expenses{% endblock %}
+{% block actions %}<a href="{% url 'dashboard:finance' %}" class="btn btn-ghost"><i class="bi bi-bank"></i> Finance overview</a>{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-4 order-xl-2">
+    <form method="post" enctype="multipart/form-data" class="ks-card" id="add">
+      {% csrf_token %}
+      <div class="ks-card-title">Record an expense</div>
+      <div class="d-grid gap-3">
+        <div><span class="form-label d-block">What for?</span>
+          <div class="ks-chips">{% for k, l, icon in categories %}<label><input type="radio" name="category" value="{{ k }}" {% if forloop.first %}checked{% endif %}><span><i class="bi bi-{{ icon }}"></i> {{ l }}</span></label>{% endfor %}</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-7"><label class="form-label" for="e-amount">Amount ({{ site.currency_symbol }})</label><input id="e-amount" type="number" step="0.01" min="0.01" name="amount" class="form-control form-control-lg" required></div>
+          <div class="col-5"><label class="form-label" for="e-date">Date</label><input id="e-date" type="date" name="spent_on" class="form-control form-control-lg" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}"></div>
+        </div>
+        <div><label class="form-label" for="e-desc">Description</label><input id="e-desc" name="description" class="form-control" placeholder="e.g. Cash Power top-up for block B" maxlength="200" required></div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label" for="e-payee">Paid to</label><input id="e-payee" name="payee" class="form-control" list="payees" placeholder="NAWEC, Modou…"><datalist id="payees">{% for p in payees %}<option value="{{ p }}">{% endfor %}</datalist></div>
+          <div class="col-6"><label class="form-label" for="e-method">Paid by</label><select id="e-method" name="method" class="form-select">{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="row g-2">
+          <div class="col-6"><label class="form-label" for="e-apt">For apartment</label><select id="e-apt" name="apartment" class="form-select"><option value="">Whole property</option>{% for a in apartments %}<option value="{{ a.pk }}">{{ a.number }} · {{ a.name }}</option>{% endfor %}</select></div>
+          <div class="col-6"><label class="form-label" for="e-ref">Reference</label><input id="e-ref" name="reference" class="form-control" placeholder="Receipt / TX no."></div>
+        </div>
+        <div><label class="form-label" for="e-receipt">Photo of the receipt <span class="ks-muted fw-normal">optional</span></label><input id="e-receipt" type="file" name="receipt" class="form-control" accept="image/*,application/pdf" capture="environment"><div class="ks-small ks-muted">On a phone this opens the camera.</div></div>
+        <button class="btn btn-ks btn-lg"><i class="bi bi-check2"></i> Record expense</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-xl-8 order-xl-1">
+    <form method="get" class="ks-card mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-3"><label class="form-label" for="f-from">From</label><input id="f-from" type="date" name="from" class="form-control" value="{{ frm|date:'Y-m-d' }}"></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="f-to">To</label><input id="f-to" type="date" name="to" class="form-control" value="{{ to|date:'Y-m-d' }}"></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="f-cat">Category</label><select id="f-cat" name="category" class="form-select"><option value="">All</option>{% for k, l, icon in categories %}<option value="{{ k }}" {% if f.category == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-6 col-md-3"><label class="form-label" for="f-apt">Apartment</label><select id="f-apt" name="apartment" class="form-select"><option value="">All</option><option value="shared" {% if f.apartment == 'shared' %}selected{% endif %}>Whole property only</option>{% for a in apartments %}<option value="{{ a.pk }}" {% if f.apartment == a.pk|stringformat:'s' %}selected{% endif %}>{{ a.number }}</option>{% endfor %}</select></div>
+        <div class="col-12 d-flex gap-2"><button class="btn btn-ghost btn-sm">Filter</button><a href="?all=1" class="btn btn-link btn-sm">Show everything</a></div>
+      </div>
+    </form>
+
+    <div class="ks-card">
+      <div class="ks-card-title"><span>{{ count }} expense{{ count|pluralize }}</span><span>{{ total|money }}</span></div>
+      <div class="table-responsive"><table class="ks-table">
+        <thead><tr><th>Date</th><th>What</th><th>For</th><th class="text-end">Amount</th><th></th></tr></thead>
+        <tbody>
+        {% for e in page %}
+        <tr>
+          <td class="text-nowrap">{{ e.spent_on|date:"j M" }}</td>
+          <td><div class="fw-semibold">{{ e.description }}</div><div class="ks-small ks-muted">{{ e.get_category_display }}{% if e.payee %} · {{ e.payee }}{% endif %} · {{ e.get_method_display }}{% if e.reference %} · {{ e.reference }}{% endif %}</div>
+            {% if e.receipt %}<a class="ks-receipt-link" href="{{ e.receipt.url }}" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> Receipt</a>{% endif %}</td>
+          <td>{% if e.apartment %}Apt {{ e.apartment.number }}{% else %}<span class="ks-muted">Property</span>{% endif %}</td>
+          <td class="text-end fw-bold">{{ e.amount|money }}</td>
+          <td class="text-end"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="expense" value="{{ e.pk }}"><button class="btn btn-sm btn-ghost" aria-label="Delete expense" data-confirm="Delete this expense of {{ e.amount|money }}?"><i class="bi bi-trash"></i></button></form></td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="ks-empty">No expenses for these filters. Record electricity, fuel, salaries and supplies here to see your real profit.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+      {% include "dashboard/_pager.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}

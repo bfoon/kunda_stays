@@ -1,26 +1,84 @@
 {% load static %}<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Staff login · {{ site.name }}</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff sign-in · {{ site.name }}</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 <link href="{% static 'css/ks.css' %}" rel="stylesheet"></head>
 <body>
-<div class="ks-auth">
-  <div class="ks-auth-art">
-    <div class="d-flex align-items-center gap-2"><span class="ks-mark" style="background:var(--ks-sun)"></span><strong class="ks-display fs-4">{{ site.name }}</strong></div>
-    <div><h1 class="text-white" style="max-width:12ch">Every door, every night, one screen.</h1><p style="color:#CFE5E8">Bookings, payments, guests and maintenance for {{ site.name }}.</p></div>
-    <small style="color:#9cc2c8">{{ site.address }}</small>
-  </div>
-  <div class="d-flex align-items-center justify-content-center p-4">
-    <form method="post" class="w-100 d-grid gap-3" style="max-width:360px">
+<div class="ks-gate">
+  <section class="ks-gate-rack" aria-label="Tonight at {{ site.name }}">
+    <a class="brand" href="/"><span class="ks-mark"></span>{{ site.name }}</a>
+    <div>
+      <h1 class="ks-gate-title">The front desk.</h1>
+      <p class="ks-gate-lede">Bookings, money, rooms and rates for {{ site.name }}. Sign in to start your shift.</p>
+    </div>
+    {% if keys %}
+    <div class="ks-rack">
+      <div class="ks-rack-board">
+        <div class="ks-rack-rail"></div>
+        <ul class="ks-hooks">
+          {% for k in keys %}
+          <li class="ks-hook" title="Apt {{ k.number }}: {% if k.free %}free tonight{% else %}a guest has the key{% endif %}">
+            {% if k.free %}<span class="ks-keytag" style="--accent: {{ k.accent }}; --i: {{ forloop.counter0 }}"><span class="tag"><span class="hole"></span><b>{{ k.number }}</b></span></span>
+            {% else %}<span class="ks-hook-empty" aria-label="Apt {{ k.number }} occupied">{{ k.number }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="ks-rack-legend">
+        <span><strong>{{ free_tonight }}</strong>keys on the rack, free tonight</span>
+        <span><strong>{{ keys|length }}</strong>apartments</span>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  <main class="ks-gate-form">
+    <form method="post" novalidate>
       {% csrf_token %}
-      <h2 class="m-0">Staff login</h2>
-      {% if form.errors %}<div class="alert alert-danger py-2 mb-0">That username and password don't match. Try again.</div>{% endif %}
-      <div><label class="form-label" for="id_username">Username</label><input id="id_username" name="username" class="form-control form-control-lg" autofocus required></div>
-      <div><label class="form-label" for="id_password">Password</label><input id="id_password" name="password" type="password" class="form-control form-control-lg" required></div>
-      <input type="hidden" name="next" value="{{ next|default:'/dashboard/' }}">
-      <button class="btn btn-ks btn-lg">Log in</button>
-      <a href="/" class="ks-small text-center">Back to the website</a>
+      <h2>Staff sign-in</h2>
+      <p class="sub">Use your username or email.</p>
+      {% if error %}<div class="alert alert-danger py-2 mb-0" role="alert"><i class="bi bi-exclamation-circle"></i> {{ error }}</div>{% endif %}
+      <div>
+        <label class="form-label" for="id_username">Username or email</label>
+        <input id="id_username" name="username" class="form-control form-control-lg" value="{{ username|default:'' }}" autocomplete="username" autocapitalize="none" spellcheck="false" {% if not username %}autofocus{% endif %} required>
+      </div>
+      <div>
+        <label class="form-label" for="id_password">Password</label>
+        <div class="ks-pw">
+          <input id="id_password" name="password" type="password" class="form-control form-control-lg" autocomplete="current-password" {% if username %}autofocus{% endif %} required>
+          <button type="button" data-pw-toggle aria-label="Show password" aria-pressed="false"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="ks-caps" data-caps role="status"><i class="bi bi-capslock"></i> Caps Lock is on</div>
+      </div>
+      <div class="ks-gate-foot">
+        <div class="form-check m-0"><input class="form-check-input" type="checkbox" name="remember" id="remember" checked><label class="form-check-label" for="remember">Keep me signed in</label></div>
+        <span class="ks-muted">Forgot it? Ask a manager.</span>
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn btn-ks btn-lg"><i class="bi bi-key"></i> Sign in</button>
+      <p class="ks-small ks-muted m-0">On a shared computer? Untick “Keep me signed in” and you'll be signed out when the browser closes.</p>
+      <a href="/" class="ks-small">Back to the website</a>
     </form>
-  </div>
+  </main>
 </div>
+<script>
+(function () {
+  var pw = document.getElementById("id_password"), btn = document.querySelector("[data-pw-toggle]"), caps = document.querySelector("[data-caps]");
+  btn.addEventListener("click", function () {
+    var show = pw.type === "password";
+    pw.type = show ? "text" : "password";
+    btn.setAttribute("aria-pressed", show);
+    btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    btn.innerHTML = show ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+    pw.focus();
+  });
+  ["keydown", "keyup"].forEach(function (ev) {
+    pw.addEventListener(ev, function (e) { if (e.getModifierState) caps.classList.toggle("on", e.getModifierState("CapsLock")); });
+  });
+})();
+</script>
 </body></html>

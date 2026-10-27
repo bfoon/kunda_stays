@@ -18,8 +18,27 @@ from stays.utils import parse_date, parse_decimal, parse_int
 
 
 class StaffMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """Signed-in staff whose role includes `section` (a name or a tuple of names)."""
+    section = "front"
+
     def test_func(self):
-        return self.request.user.is_staff
+        from .roles import can
+
+        user = self.request.user
+        wanted = self.section if isinstance(self.section, (tuple, list)) else (self.section,)
+        return user.is_staff and any(can(user, s) for s in wanted)
+
+    def handle_no_permission(self):
+        from .roles import home_url_name, user_role
+
+        user = self.request.user
+        if not user.is_authenticated:
+            return super().handle_no_permission()
+        if not user.is_staff:
+            return render(self.request, "dashboard/denied.html", {"not_staff": True}, status=403)
+        if self.section == "today":  # the portal's front door: send people to their own start page
+            return redirect(home_url_name(user))
+        return render(self.request, "dashboard/denied.html", {"role": user_role(user), "home": home_url_name(user)}, status=403)
 
 
 def _month_add(d, n):
@@ -32,6 +51,8 @@ def _overlap(ci, co, start, end):
 
 
 class HomeView(StaffMixin, View):
+    section = "today"
+
     def get(self, request):
         from stays.services import revenue_between
 
@@ -79,6 +100,8 @@ class HomeView(StaffMixin, View):
 
 
 class TapeChartView(StaffMixin, View):
+    section = "front"
+
     def get(self, request):
         today = timezone.localdate()
         days = 30 if request.GET.get("days") == "30" else 14
@@ -116,6 +139,8 @@ class TapeChartView(StaffMixin, View):
 
 
 class ApartmentListView(StaffMixin, View):
+    section = "property"
+
     def get(self, request):
         today = timezone.localdate()
         window = today - timedelta(days=30)
@@ -136,14 +161,19 @@ class ApartmentListView(StaffMixin, View):
 
 
 class ApartmentEditView(StaffMixin, View):
+    section = "property"
+
     FIELDS_INT = ("floor", "bedrooms", "bathrooms", "capacity", "deposit_percent")
 
     def get(self, request, pk=None):
         apt = get_object_or_404(Apartment, pk=pk) if pk else Apartment(daily_rate=Decimal("2500"), capacity=2)
+        photos = list(apt.photos.order_by("order", "created_at")) if pk else []
         return render(request, "dashboard/apartment_form.html", {
             "apt": apt, "amenities": Amenity.objects.all(),
             "selected": set(apt.amenities.values_list("id", flat=True)) if pk else set(),
-            "photos": apt.photos.all() if pk else [], "statuses": Apartment.STATUS_CHOICES,
+            "photos": photos, "statuses": Apartment.STATUS_CHOICES,
+            "score": listing_score(apt, photos) if pk else None,
+            "rules": apt.rate_rules.filter(is_active=True) if pk else [],
         })
 
     def post(self, request, pk=None):
@@ -205,10 +235,19 @@ class ApartmentEditView(StaffMixin, View):
             if ph:
                 ph.image.delete(save=False)
                 ph.delete()
+        for ph in apt.photos.all():
+            key = f"caption_{ph.pk}"
+            if key in p and p[key].strip()[:120] != ph.caption:
+                ph.caption = p[key].strip()[:120]
+                ph.save(update_fields=["caption", "updated_at"])
+        order = [i for i in p.get("photo_order", "").split(",") if i]
+        for position, photo_id in enumerate(order):
+            ApartmentPhoto.objects.filter(pk=photo_id, apartment=apt).update(order=position)
         start_order = apt.photos.count()
         for i, f in enumerate(request.FILES.getlist("photos")):
             if (f.content_type or "").startswith("image/"):
-                ApartmentPhoto.objects.create(apartment=apt, image=f, order=start_order + i, caption=f.name.rsplit(".", 1)[0][:120])
+                caption = f.name.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")[:120]
+                ApartmentPhoto.objects.create(apartment=apt, image=f, order=start_order + i, caption=caption)
         if p.get("cover"):
             apt.photos.update(is_cover=False)
             apt.photos.filter(pk=p["cover"]).update(is_cover=True)
@@ -217,7 +256,25 @@ class ApartmentEditView(StaffMixin, View):
         return redirect("dashboard:apartment_edit", pk=apt.pk)
 
 
+def listing_score(apt, photos):
+    """How complete a listing is, with the next fixes to make. Guests book what they can see."""
+    checks = [
+        (len(photos) >= 5, 25, f"Add {max(0, 5 - len(photos))} more photo{'s' if 5 - len(photos) != 1 else ''} (5+ sells best)"),
+        (len(apt.description or "") >= 300, 20, "Write a longer description (300+ characters)"),
+        (apt.amenities.count() >= 6, 15, "Tick at least 6 amenities"),
+        (bool(apt.tagline), 10, "Add a one-line summary"),
+        (all(p.caption for p in photos) and bool(photos), 10, "Caption every photo (Bedroom, Kitchen…)"),
+        (bool(apt.monthly_rate), 10, "Set a monthly rate for long stays"),
+        (bool(apt.size_sqm), 5, "Add the size in m²"),
+        (any(p.is_cover for p in photos), 5, "Choose a cover photo"),
+    ]
+    score = sum(points for ok, points, _ in checks if ok)
+    return {"score": score, "todo": [tip for ok, _, tip in checks if not ok][:3]}
+
+
 class BookingListView(StaffMixin, View):
+    section = "front"
+
     def get(self, request):
         qs = Booking.objects.select_related("guest", "apartment").prefetch_related("payments")
         q = request.GET.get("q", "").strip()
@@ -247,6 +304,8 @@ class BookingListView(StaffMixin, View):
 
 
 class BookingCreateView(StaffMixin, View):
+    section = "front"
+
     def get(self, request):
         return render(request, "dashboard/booking_form.html", {
             "apartments": Apartment.objects.exclude(status=Apartment.INACTIVE),
@@ -298,6 +357,8 @@ class BookingCreateView(StaffMixin, View):
 
 
 class BookingDetailView(StaffMixin, View):
+    section = ("front", "payments")
+
     def _get(self, pk):
         return get_object_or_404(
             Booking.objects.select_related("guest", "apartment", "created_by").prefetch_related("payments__received_by", "messages"), pk=pk
@@ -390,6 +451,8 @@ class BookingDetailView(StaffMixin, View):
 
 
 class PaymentListView(StaffMixin, View):
+    section = "payments"
+
     def get(self, request):
         qs = Payment.objects.select_related("booking__guest", "booking__apartment", "received_by")
         status, method = request.GET.get("status", ""), request.GET.get("method", "")
@@ -424,6 +487,8 @@ class PaymentListView(StaffMixin, View):
 
 
 class GuestListView(StaffMixin, View):
+    section = "front"
+
     def get(self, request):
         q = request.GET.get("q", "").strip()
         qs = Guest.objects.annotate(stays=Count("bookings")).order_by("full_name")
@@ -433,6 +498,8 @@ class GuestListView(StaffMixin, View):
 
 
 class GuestDetailView(StaffMixin, View):
+    section = "front"
+
     def get(self, request, pk):
         g = get_object_or_404(Guest, pk=pk)
         bookings = g.bookings.select_related("apartment").prefetch_related("payments")
@@ -453,6 +520,8 @@ class GuestDetailView(StaffMixin, View):
 
 
 class MaintenanceView(StaffMixin, View):
+    section = "maintenance"
+
     def get(self, request):
         status = request.GET.get("status", "active")
         qs = MaintenanceTicket.objects.select_related("apartment")
@@ -502,6 +571,8 @@ class MaintenanceView(StaffMixin, View):
 
 
 class ReportsView(StaffMixin, View):
+    section = "reports"
+
     def get(self, request):
         from stays.services import signed_amount
 
@@ -581,6 +652,8 @@ class ReportsView(StaffMixin, View):
 
 
 class MessagesView(StaffMixin, View):
+    section = "front"
+
     def get(self, request):
         tab = request.GET.get("tab", "outbox")
         logs = MessageLog.objects.select_related("booking__guest")

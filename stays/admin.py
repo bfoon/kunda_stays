@@ -1,7 +1,7 @@
 from django.contrib import admin
 
-from .models import (Amenity, Apartment, ApartmentPhoto, Booking, ContactInquiry, Guest, MaintenanceTicket,
-                     MessageLog, Payment)
+from .models import (ActivityLog, Amenity, Apartment, ApartmentPhoto, Booking, CashUp, ContactInquiry, Expense, Guest,
+                     MaintenanceTicket, MessageLog, Payment, PropertyProfile, RateRule)
 
 
 class PhotoInline(admin.TabularInline):
@@ -45,3 +45,40 @@ admin.site.register(Guest, search_fields=("full_name", "phone", "email"), list_d
 admin.site.register(MaintenanceTicket, list_display=("title", "apartment", "priority", "status"), list_filter=("status", "priority"))
 admin.site.register(MessageLog, list_display=("kind", "to", "status", "created_at"), list_filter=("status", "kind"))
 admin.site.register(ContactInquiry, list_display=("name", "phone", "handled", "created_at"))
+
+
+@admin.register(RateRule)
+class RateRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "adjust_type", "value", "start", "end", "min_nights", "priority", "is_active")
+    list_filter = ("is_active", "adjust_type")
+    filter_horizontal = ("apartments",)
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ("spent_on", "category", "description", "amount", "apartment", "recorded_by")
+    list_filter = ("category", "method")
+    search_fields = ("description", "payee", "reference")
+    date_hierarchy = "spent_on"
+
+
+@admin.register(CashUp)
+class CashUpAdmin(admin.ModelAdmin):
+    list_display = ("business_date", "staff", "expected_cash", "counted_cash", "float_amount", "reviewed_by")
+    list_filter = ("staff",)
+
+
+@admin.register(ActivityLog)
+class ActivityLogAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "category", "summary", "user", "actor", "ip")
+    list_filter = ("category",)
+    search_fields = ("summary",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register(PropertyProfile)

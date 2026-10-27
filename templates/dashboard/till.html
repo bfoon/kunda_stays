@@ -1,0 +1,105 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Close the till{% endblock %}
+{% block heading %}Close the till · {{ day|date:"D j M" }}{% endblock %}
+{% block content %}
+{% if closed %}
+<div class="ks-card mb-4">
+  <div class="row g-3 align-items-center">
+    <div class="col-md-7">
+      <div class="ks-card-title mb-1"><span><i class="bi bi-check2-circle text-success"></i> Closed at {{ closed.created_at|time:"H:i" }}</span></div>
+      <p class="ks-muted mb-0">Expected {{ closed.expected_cash|money }} in cash, counted {{ closed.counted_cash|money }}{% if closed.float_amount %} with a {{ closed.float_amount|money }} float{% endif %}.
+      {% if closed.reviewed_by %}Signed off by {{ closed.reviewed_by.first_name|default:closed.reviewed_by.username }}.{% else %}Waiting for finance to sign it off.{% endif %}</p>
+    </div>
+    <div class="col-md-5"><div class="ks-verdict m-0 {% if closed.variance == 0 %}ok{% elif closed.variance < 0 %}short{% else %}over{% endif %}"><strong>{% if closed.variance == 0 %}Balanced{% elif closed.variance < 0 %}−{{ closed.variance|abs_value|money }}{% else %}+{{ closed.variance|money }}{% endif %}</strong><span>{% if closed.variance == 0 %}Cash matched the system{% elif closed.variance < 0 %}Short{% else %}Over{% endif %}</span></div></div>
+  </div>
+  <button type="button" class="btn btn-sm btn-ghost mt-3" data-bs-toggle="collapse" data-bs-target="#reclose" aria-expanded="false" aria-controls="reclose"><i class="bi bi-arrow-repeat"></i> Close again — only if you took more money after closing</button>
+</div>
+{% endif %}
+
+<form method="post" data-till data-expected="{{ expected_cash|floatformat:'2u' }}" {% if closed %}id="reclose" class="collapse"{% endif %}>
+  {% csrf_token %}{% if closed %}<input type="hidden" name="again" value="1">{% endif %}
+  <div class="row g-4">
+    <div class="col-xl-8 d-grid gap-4 align-content-start">
+      <div class="ks-card">
+        <div class="ks-card-title"><span>Count the cash drawer</span><span class="ks-small ks-muted fw-normal">Tap + for each note</span></div>
+        <div class="ks-notes">
+          {% for d in denoms %}
+          <div class="ks-note" data-denom="{{ d }}">
+            <div class="ks-note-face"><b>{{ site.currency_symbol }}{{ d }}</b><small data-line></small></div>
+            <div class="ks-stepper">
+              <button type="button" data-step="-1" aria-label="One fewer {{ d }}">−</button>
+              <input type="number" min="0" inputmode="numeric" name="count_{{ d }}" class="form-control" value="0" aria-label="Number of {{ d }}s">
+              <button type="button" data-step="1" aria-label="One more {{ d }}">+</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="row g-3 mt-1">
+          <div class="col-sm-6"><label class="form-label" for="loose">Loose coins and bututs</label><div class="input-group"><span class="input-group-text">{{ site.currency_symbol }}</span><input id="loose" type="number" step="0.01" min="0" name="loose" class="form-control" value="0"></div></div>
+          <div class="col-sm-6"><label class="form-label" for="float">Opening float left in the drawer</label><div class="input-group"><span class="input-group-text">{{ site.currency_symbol }}</span><input id="float" type="number" step="0.01" min="0" name="float" class="form-control" value="0"></div><div class="ks-small ks-muted">Taken off before comparing</div></div>
+        </div>
+      </div>
+
+      {% if non_cash %}
+      <div class="ks-card">
+        <div class="ks-card-title"><span>Match mobile money &amp; bank</span><span class="ks-small ks-muted fw-normal">Tick each one after checking the statement</span></div>
+        <div class="d-grid gap-2">
+          {% for k, m in non_cash.items %}
+          <label class="ks-mm"><input type="checkbox" class="form-check-input m-0" name="checked" value="{{ k }}"><span><span class="fw-semibold">{{ m.label }}</span> <span class="ks-small ks-muted">{{ m.count }} payment{{ m.count|pluralize }}</span></span><strong>{{ m.total|money }}</strong></label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="ks-card">
+        <div class="ks-card-title"><span>Money you took today</span><span class="ks-small ks-muted fw-normal">Payments recorded or verified by you</span></div>
+        <div class="table-responsive"><table class="ks-table">
+          <thead><tr><th>Time</th><th>Booking</th><th>Method</th><th class="text-end">Amount</th></tr></thead>
+          <tbody>
+          {% for p in pays %}
+          <tr><td>{{ p.paid_at|time:"H:i" }}</td><td><a href="{% url 'dashboard:booking' p.booking.pk %}">{{ p.booking.reference }}</a> <span class="ks-small ks-muted">{{ p.booking.guest.full_name }}</span></td><td>{{ p.get_method_display }}</td><td class="text-end">{% if p.kind == 'refund' %}−{% endif %}{{ p.amount|money }}</td></tr>
+          {% empty %}<tr><td colspan="4" class="ks-empty">You haven't taken any payments today.</td></tr>{% endfor %}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="col-xl-4">
+      <div class="ks-card ks-balance">
+        <div class="ks-card-title">Balance</div>
+        <div class="ks-balance-row"><span>Cash the system expects</span><strong>{{ expected_cash|money }}</strong></div>
+        <div class="ks-balance-row"><span>Counted in the drawer</span><strong data-counted>—</strong></div>
+        <div class="ks-balance-row total"><span>Counted minus float</span><strong data-net>—</strong></div>
+        <div class="ks-verdict" data-verdict aria-live="polite"><strong data-verdict-amount>—</strong><span data-verdict-text></span></div>
+        <label class="form-label" for="note">Note for finance</label>
+        <textarea id="note" name="note" rows="3" class="form-control mb-3" placeholder="e.g. D100 short — gave change to Apt 203 taxi driver"></textarea>
+        <button class="btn btn-ks btn-lg w-100"><i class="bi bi-safe"></i> Close the till</button>
+        <p class="ks-small ks-muted mt-2 mb-0">Closing records your count. It doesn't move or change any payments.</p>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="ks-card mt-4">
+  <div class="ks-card-title"><span>{% if reviewer %}Recent till closes{% else %}Your recent closes{% endif %}</span></div>
+  <div class="table-responsive"><table class="ks-table">
+    <thead><tr><th>Day</th>{% if reviewer %}<th>Staff</th>{% endif %}<th class="text-end">Expected</th><th class="text-end">Counted</th><th class="text-end">Difference</th><th>Note</th><th>Sign-off</th></tr></thead>
+    <tbody>
+    {% for c in history %}
+    <tr>
+      <td class="text-nowrap">{{ c.business_date|date:"D j M" }}</td>
+      {% if reviewer %}<td>{{ c.staff.get_full_name|default:c.staff.username }}</td>{% endif %}
+      <td class="text-end">{{ c.expected_cash|money }}</td>
+      <td class="text-end">{{ c.counted_cash|money }}{% if c.float_amount %}<div class="ks-small ks-muted">float {{ c.float_amount|money }}</div>{% endif %}</td>
+      <td class="text-end"><span class="ks-pill {% if c.variance == 0 %}ks-pill--mangrove{% elif c.variance < 0 %}ks-pill--bougain{% else %}ks-pill--sun{% endif %}">{% if c.variance == 0 %}Balanced{% elif c.variance < 0 %}−{{ c.variance|abs_value|money }}{% else %}+{{ c.variance|money }}{% endif %}</span></td>
+      <td class="ks-small">{{ c.note|truncatechars:60 }}</td>
+      <td>{% if c.reviewed_by %}<span class="ks-small"><i class="bi bi-check2 text-success"></i> {{ c.reviewed_by.first_name|default:c.reviewed_by.username }}</span>
+        {% elif reviewer and c.staff_id != user.id or reviewer and user.is_superuser %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="review"><input type="hidden" name="cashup" value="{{ c.pk }}"><button class="btn btn-sm btn-ks">Sign off</button></form>
+        {% else %}<span class="ks-small ks-muted">Waiting</span>{% endif %}</td>
+    </tr>
+    {% empty %}<tr><td colspan="7" class="ks-empty">No till closes yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

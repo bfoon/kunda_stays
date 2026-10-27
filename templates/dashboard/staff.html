@@ -1,0 +1,65 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Staff & roles{% endblock %}
+{% block heading %}Staff &amp; roles{% endblock %}
+{% block content %}
+{% if new_password %}
+<div class="ks-handover mb-4" role="status">
+  <div class="fw-semibold text-white"><i class="bi bi-key"></i> Give these to {{ new_password.name }} — the password is shown only once</div>
+  <div class="d-flex flex-wrap gap-3 align-items-center">
+    <span>Username <code>{{ new_password.username }}</code></span>
+    <span>Password <code>{{ new_password.password }}</code></span>
+    <button type="button" class="btn btn-sm btn-sun" data-copy="Sign in at {{ site.site_url }}/accounts/login/ — username: {{ new_password.username }} — password: {{ new_password.password }}"><i class="bi bi-clipboard"></i> Copy</button>
+  </div>
+  <div class="ks-small">They should change it under My account after signing in.</div>
+</div>
+{% endif %}
+<div class="row g-4">
+  <div class="col-xl-8">
+    <div class="ks-card">
+      <div class="ks-card-title"><span>Team</span><span class="ks-small ks-muted fw-normal">{{ rows|length }} account{{ rows|length|pluralize }}</span></div>
+      {% for r in rows %}{% with u=r.u %}
+      <div class="ks-person {% if not u.is_active %}is-off{% endif %}">
+        <span class="av">{% if u.first_name %}{{ u.first_name|slice:":1" }}{{ u.last_name|slice:":1" }}{% else %}{{ u.username|slice:":2"|upper }}{% endif %}</span>
+        <div>
+          <div class="fw-semibold">{{ u.get_full_name|default:u.username }}{% if u == user %} <span class="ks-pill ks-pill--river">You</span>{% endif %}{% if not u.is_active %} <span class="ks-pill ks-pill--muted">Switched off</span>{% endif %}</div>
+          <div class="ks-small ks-muted">{{ u.username }}{% if u.email %} · {{ u.email }}{% endif %} · {% if u.last_login %}last in {{ u.last_login|timesince }} ago{% else %}never signed in{% endif %}</div>
+        </div>
+        <div class="d-flex flex-wrap gap-1 justify-content-end align-items-center">
+          {% if u.is_superuser %}<span class="ks-pill ks-pill--sun"><i class="bi bi-shield-lock"></i> Superuser</span>
+          {% elif u != user %}
+          <form method="post" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="action" value="role"><input type="hidden" name="user" value="{{ u.pk }}">
+            <select name="role" class="form-select form-select-sm" aria-label="Role for {{ u.username }}" onchange="this.form.submit()">{% for name in role_names %}<option {% if r.role == name %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+          </form>
+          {% else %}<span class="ks-pill ks-pill--river">{{ r.role }}</span>{% endif %}
+          {% if u != user and not u.is_superuser or u != user and user.is_superuser %}
+          <div class="dropdown"><button class="btn btn-sm btn-ghost" data-bs-toggle="dropdown" aria-label="More for {{ u.username }}"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><form method="post">{% csrf_token %}<input type="hidden" name="user" value="{{ u.pk }}"><button class="dropdown-item" name="action" value="reset" data-confirm="Make a new one-time password for {{ u.username }}?"><i class="bi bi-key"></i> New password</button></form></li>
+              <li><form method="post">{% csrf_token %}<input type="hidden" name="user" value="{{ u.pk }}">{% if u.is_active %}<button class="dropdown-item text-danger" name="action" value="deactivate" data-confirm="Switch off {{ u.username }}? They won't be able to sign in. Their history stays."><i class="bi bi-person-x"></i> Switch off account</button>{% else %}<button class="dropdown-item" name="action" value="activate"><i class="bi bi-person-check"></i> Switch back on</button>{% endif %}</form></li>
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endwith %}{% endfor %}
+    </div>
+  </div>
+  <div class="col-xl-4 d-grid gap-4 align-content-start">
+    <form method="post" class="ks-card">
+      {% csrf_token %}<input type="hidden" name="action" value="create">
+      <div class="ks-card-title">Add a team member</div>
+      <div class="d-grid gap-3">
+        <div class="row g-2"><div class="col-6"><label class="form-label" for="s-first">First name</label><input id="s-first" name="first_name" class="form-control" required></div><div class="col-6"><label class="form-label" for="s-last">Last name</label><input id="s-last" name="last_name" class="form-control"></div></div>
+        <div><label class="form-label" for="s-user">Username</label><input id="s-user" name="username" class="form-control" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_.\-]+" placeholder="e.g. awa" required></div>
+        <div><label class="form-label" for="s-email">Email <span class="ks-muted fw-normal">optional, lets them sign in with it</span></label><input id="s-email" type="email" name="email" class="form-control"></div>
+        <div><label class="form-label" for="s-role">Role</label><select id="s-role" name="role" class="form-select">{% for name in role_names %}<option {% if name == 'Front desk' %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></div>
+        <button class="btn btn-ks"><i class="bi bi-person-plus"></i> Add and make a password</button>
+      </div>
+    </form>
+    <div class="ks-card">
+      <div class="ks-card-title">What each role can do</div>
+      <div class="d-grid gap-2">{% for name, info in roles.items %}<div class="ks-role-card"><i class="bi bi-{{ info.icon }}"></i><div><div class="fw-semibold">{{ name }}</div><div class="ks-small ks-muted">{{ info.summary }}</div></div></div>{% endfor %}</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -44,6 +44,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "stays.middleware.PortalMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -59,6 +60,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "stays.context_processors.site",
+                "dashboard.context_processors.portal",
             ],
         },
     },
@@ -98,9 +100,18 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 
+# Shared cache (login throttling). Redis when available, per-process memory otherwise.
+if env("REDIS_URL"):
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": env("REDIS_URL"), "KEY_PREFIX": "ks"}}
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/dashboard/"
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # "Keep me signed in" lasts two weeks
+LOGIN_MAX_ATTEMPTS = int(env("LOGIN_MAX_ATTEMPTS", "5"))
+LOGIN_LOCKOUT_MINUTES = int(env("LOGIN_LOCKOUT_MINUTES", "10"))
 LOGOUT_REDIRECT_URL = "/"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
@@ -148,7 +159,13 @@ KUNDA = {
     "whatsapp_token": env("WHATSAPP_TOKEN", ""),
     "whatsapp_phone_id": env("WHATSAPP_PHONE_NUMBER_ID", ""),
     "whatsapp_api_version": env("WHATSAPP_API_VERSION", "v21.0"),
+    "house_rules": env("HOUSE_RULES", ""),
+    "cancellation_policy": env("CANCELLATION_POLICY", ""),
+    # Notes and coins counted at till close, largest first
+    "cash_denominations": [int(x) for x in env("CASH_DENOMINATIONS", "200,100,50,25,20,10,5,1").split(",") if x.strip()],
 }
+# Untouched .env values; the portal's Property profile overrides KUNDA on top of these.
+KUNDA_DEFAULTS = dict(KUNDA)
 
 LOGGING = {
     "version": 1,

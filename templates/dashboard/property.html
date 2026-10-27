@@ -1,0 +1,48 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Property profile{% endblock %}
+{% block heading %}Property profile{% endblock %}
+{% block actions %}<a href="{% url 'stays:home' %}" target="_blank" rel="noopener" class="btn btn-ghost"><i class="bi bi-eye"></i> View website</a>{% endblock %}
+{% block content %}
+<form method="post" data-profile-form>
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-xl-8 d-grid gap-4 align-content-start">
+      <p class="ks-muted m-0">These details appear on the website, receipts, booking pages and WhatsApp messages. Leave a field empty to keep the value from the server settings (shown in grey).</p>
+      {% for g in groups %}
+      <div class="ks-card">
+        <div class="ks-card-title"><span><i class="bi bi-{{ g.icon }} me-1"></i> {{ g.title }}</span></div>
+        <div class="row g-3">
+          {% for f in g.fields %}
+          <div class="{% if f.name == 'address' or f.name == 'bank_details' or f.name == 'tagline' %}col-12{% elif f.type == 'time' or f.name == 'lat' or f.name == 'lng' %}col-6 col-md-4{% else %}col-md-6{% endif %}">
+            <label class="form-label" for="p-{{ f.name }}">{{ f.label }}</label>
+            <input id="p-{{ f.name }}" name="{{ f.name }}" type="{{ f.type }}" class="form-control" value="{{ f.value }}" placeholder="{{ f.default }}" {% if f.type == 'number' %}min="1" max="168"{% endif %}>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="ks-card">
+        <div class="ks-card-title"><span><i class="bi bi-card-checklist me-1"></i> Policies guests see before booking</span></div>
+        <div class="d-grid gap-3">
+          <div><label class="form-label" for="p-rules">House rules</label><textarea id="p-rules" name="house_rules" rows="5" class="form-control" placeholder="One rule per line, e.g.&#10;No smoking indoors&#10;Quiet hours 22:00–07:00&#10;Visitors must sign in at the gate">{{ prof.house_rules }}</textarea><div class="ks-default-hint">Shown on every apartment page, one rule per line.</div></div>
+          <div><label class="form-label" for="p-cancel">Cancellation policy</label><textarea id="p-cancel" name="cancellation_policy" rows="4" class="form-control" placeholder="e.g. Free cancellation up to 7 days before arrival. After that the deposit is kept.">{{ prof.cancellation_policy }}</textarea></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="position-sticky d-grid gap-3" style="top: 1rem">
+        <div>
+          <div class="ks-small fw-semibold mb-2 text-center ks-muted">How the confirmation looks on WhatsApp</div>
+          <div class="ks-phone" aria-hidden="true"><div class="ks-phone-screen">
+            <div class="ks-phone-bar"><span class="av"><i class="bi bi-house-door"></i></span><span data-wa-name></span></div>
+            <div class="ks-bubble" data-wa-preview></div>
+          </div></div>
+        </div>
+        <button class="btn btn-ks btn-lg"><i class="bi bi-check2"></i> Save profile</button>
+        {% if prof.updated_by %}<p class="ks-small ks-muted text-center m-0">Last saved {{ prof.updated_at|timesince }} ago by {{ prof.updated_by.first_name|default:prof.updated_by.username }}</p>{% endif %}
+        <button class="btn btn-link text-danger btn-sm" name="action" value="reset" formnovalidate data-confirm="Clear every field and go back to the server settings?">Reset to server settings</button>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}

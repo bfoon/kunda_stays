@@ -1,0 +1,37 @@
+{% extends "dashboard/base.html" %}
+{% block title %}My account{% endblock %}
+{% block heading %}My account{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-6 d-grid gap-4 align-content-start">
+    <form method="post" class="ks-card">
+      {% csrf_token %}<input type="hidden" name="action" value="profile">
+      <div class="ks-card-title"><span>Your details</span><span class="ks-pill ks-pill--river"><i class="bi bi-{{ role_info.icon }}"></i> {{ role }}</span></div>
+      <div class="row g-3">
+        <div class="col-6"><label class="form-label" for="a-first">First name</label><input id="a-first" name="first_name" class="form-control" value="{{ user.first_name }}"></div>
+        <div class="col-6"><label class="form-label" for="a-last">Last name</label><input id="a-last" name="last_name" class="form-control" value="{{ user.last_name }}"></div>
+        <div class="col-12"><label class="form-label" for="a-email">Email</label><input id="a-email" type="email" name="email" class="form-control" value="{{ user.email }}"><div class="ks-small ks-muted">You can sign in with this or your username, <strong>{{ user.username }}</strong>.</div></div>
+        <div class="col-12"><button class="btn btn-ks">Save details</button></div>
+      </div>
+    </form>
+    <div class="ks-card"><div class="ks-card-title">Your role</div><p class="mb-0">{{ role_info.summary }}</p></div>
+  </div>
+  <div class="col-xl-6 d-grid gap-4 align-content-start">
+    <form method="post" class="ks-card">
+      {% csrf_token %}<input type="hidden" name="action" value="password">
+      <div class="ks-card-title">Change password</div>
+      <div class="d-grid gap-3">
+        <div><label class="form-label" for="a-old">Current password</label><input id="a-old" type="password" name="old_password" class="form-control" autocomplete="current-password" required></div>
+        <div><label class="form-label" for="a-new">New password</label><input id="a-new" type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required><div class="ks-small ks-muted">At least 8 characters. Three random words work well.</div></div>
+        <div><label class="form-label" for="a-new2">New password again</label><input id="a-new2" type="password" name="new_password2" class="form-control" autocomplete="new-password" required></div>
+        <button class="btn btn-ks">Change password</button>
+      </div>
+    </form>
+    <div class="ks-card">
+      <div class="ks-card-title">Recent sign-ins</div>
+      {% for e in recent %}<div class="d-flex justify-content-between py-1 ks-small"><span>{{ e.summary }}</span><span class="ks-muted">{{ e.created_at|date:"D j M, H:i" }}{% if e.ip %} · {{ e.ip }}{% endif %}</span></div>{% empty %}<div class="ks-empty">No sign-ins recorded yet.</div>{% endfor %}
+      <p class="ks-small ks-muted mt-2 mb-0">Don't recognise one? Change your password and tell a manager.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

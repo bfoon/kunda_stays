@@ -1,0 +1,56 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Housekeeping{% endblock %}
+{% block heading %}Housekeeping{% endblock %}
+{% block actions %}<a href="{% url 'dashboard:maintenance' %}" class="btn btn-ghost"><i class="bi bi-tools"></i> Report a fault</a>{% endblock %}
+{% block content %}
+<div class="ks-hk-summary" aria-label="Room states">
+  <span style="--dot: var(--ks-bougain)">{{ counts.dirty }} need cleaning</span>
+  <span style="--dot: var(--ks-sun)">{{ counts.cleaning }} being cleaned</span>
+  <span style="--dot: var(--ks-river-2)">{{ counts.clean }} waiting for inspection</span>
+  <span style="--dot: var(--ks-mangrove)">{{ counts.inspected }} guest-ready</span>
+</div>
+{% if urgent %}<div class="alert d-flex gap-2 align-items-center" style="background:var(--ks-bougain-soft);color:#8a2050;border:0"><i class="bi bi-alarm fs-5"></i><div><strong>{{ urgent }} room{{ urgent|pluralize }} must be ready by {{ checkin_time }}</strong> — guests arrive today. They're first below.</div></div>{% endif %}
+
+<div class="ks-hk-grid">
+  {% for c in cards %}{% with a=c.apt %}
+  <article class="ks-hk ks-hk--{{ a.housekeeping }} {% if c.tag == 'urgent' %}is-urgent{% endif %} {% if c.tag == 'occupied' %}is-occupied{% endif %}" aria-label="Apartment {{ a.number }}">
+    <div class="ks-hk-head">
+      <span class="ks-plaque">{{ a.number }}</span>
+      <div class="flex-grow-1"><strong>{{ a.name }}</strong><small>{{ a.get_housekeeping_display }}</small></div>
+      {% if c.tag == 'urgent' %}<span class="ks-pill ks-pill--bougain">Arrival today</span>
+      {% elif c.tag == 'leaving' %}<span class="ks-pill ks-pill--sun">Check-out today</span>
+      {% elif c.tag == 'occupied' %}<span class="ks-pill ks-pill--muted">Guest in</span>
+      {% elif c.tag == 'soon' %}<span class="ks-pill ks-pill--river">Arrival tomorrow</span>{% endif %}
+    </div>
+    <div class="ks-hk-ctx">
+      {% if c.guest %}<div><i class="bi bi-person"></i><span>{{ c.guest.guest.first_name }} until {{ c.guest.check_out|date:"D j M" }}</span></div>{% endif %}
+      {% if c.next %}<div class="{% if c.arriving_today and a.housekeeping != 'inspected' %}hot{% endif %}"><i class="bi bi-box-arrow-in-right"></i><span>Next arrival {% if c.arriving_today %}today from {{ checkin_time }}{% elif c.arriving_tomorrow %}tomorrow{% else %}{{ c.next.check_in|date:"D j M" }}{% endif %} · {{ c.next.guests_count }} guest{{ c.next.guests_count|pluralize }}</span></div>{% endif %}
+      {% if c.next.special_requests %}<div><i class="bi bi-chat-quote"></i><span>{{ c.next.special_requests|truncatechars:90 }}</span></div>{% endif %}
+      {% for t in c.tickets %}<div><i class="bi bi-wrench"></i><span>{{ t.title }}</span></div>{% endfor %}
+      {% if a.housekeeping_note %}<div><i class="bi bi-sticky"></i><span>{{ a.housekeeping_note }}</span></div>{% endif %}
+    </div>
+
+    <form method="post" class="ks-steps-track" aria-label="Set room state">
+      {% csrf_token %}<input type="hidden" name="apartment" value="{{ a.pk }}">
+      {% for s, label in flow %}<button name="state" value="{{ s }}" class="{% if forloop.counter0 <= c.step %}done{% endif %}" title="{{ label }}" aria-pressed="{% if a.housekeeping == s %}true{% else %}false{% endif %}">{% if s == 'dirty' %}Dirty{% elif s == 'cleaning' %}Cleaning{% elif s == 'clean' %}Clean{% else %}Ready{% endif %}</button>{% endfor %}
+    </form>
+
+    {% if c.next_state %}
+    <form method="post" class="d-grid gap-2">
+      {% csrf_token %}<input type="hidden" name="apartment" value="{{ a.pk }}"><input type="hidden" name="state" value="{{ c.next_state }}">
+      {% if c.next_state == 'inspected' %}<input name="note" class="form-control form-control-sm" placeholder="Note for the next shift (optional)" value="" aria-label="Note">{% endif %}
+      <button class="btn {% if c.tag == 'urgent' %}btn-sun{% elif c.tag == 'occupied' %}btn-ghost{% else %}btn-ks{% endif %} btn-advance">
+        {% if c.next_state == 'cleaning' and c.tag == 'occupied' %}<i class="bi bi-play-fill"></i> Start stay-over clean{% elif c.next_state == 'cleaning' %}<i class="bi bi-play-fill"></i> Start cleaning{% elif c.next_state == 'clean' %}<i class="bi bi-check2"></i> Mark clean{% else %}<i class="bi bi-patch-check"></i> Inspect &amp; mark ready{% endif %}
+      </button>
+    </form>
+    {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="apartment" value="{{ a.pk }}"><input type="hidden" name="state" value="dirty"><button class="btn btn-ghost w-100"><i class="bi bi-arrow-counterclockwise"></i> Needs cleaning again</button></form>
+    {% endif %}
+    {% if a.housekeeping_at %}<div class="ks-hk-meta">Updated {{ a.housekeeping_at|timesince }} ago{% if a.housekeeping_by %} by {{ a.housekeeping_by.first_name|default:a.housekeeping_by.username }}{% endif %}</div>{% endif %}
+  </article>
+  {% endwith %}{% empty %}
+  <div class="ks-empty">No apartments yet. Add one under Apartments &amp; photos.</div>
+  {% endfor %}
+</div>
+<p class="ks-small ks-muted mt-3">Rooms switch to “Needs cleaning” automatically when a guest checks out.</p>
+{% endblock %}

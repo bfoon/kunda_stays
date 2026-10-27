@@ -1,0 +1,106 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Finance{% endblock %}
+{% block heading %}Finance · {{ label }}{% endblock %}
+{% block actions %}
+<a href="{% url 'dashboard:expenses' %}#add" class="btn btn-ks"><i class="bi bi-plus-lg"></i> Record expense</a>
+<a href="{% qs export='csv' %}" class="btn btn-ghost"><i class="bi bi-download"></i> Ledger CSV</a>
+{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <nav class="ks-period" aria-label="Period">
+    <a href="?period=month" class="{% if key == 'month' %}on{% endif %}">This month</a>
+    <a href="?period=last_month" class="{% if key == 'last_month' %}on{% endif %}">Last month</a>
+    <a href="?period=30d" class="{% if key == '30d' %}on{% endif %}">Last 30 days</a>
+    <a href="?period=year" class="{% if key == 'year' %}on{% endif %}">This year</a>
+  </nav>
+  <form class="d-flex gap-2 align-items-center" method="get">
+    <input type="date" name="from" class="form-control form-control-sm" value="{{ start|date:'Y-m-d' }}" aria-label="From">
+    <input type="date" name="to" class="form-control form-control-sm" value="{{ end|date:'Y-m-d' }}" aria-label="To">
+    <button class="btn btn-sm btn-ghost">Show</button>
+  </form>
+</div>
+
+<div class="ks-kpis">
+  <div class="ks-kpi"><small>Money in</small><strong>{{ income|money }}</strong><span class="ks-kpi-note">Confirmed payments, refunds taken off</span></div>
+  <div class="ks-kpi"><small>Money out</small><strong>{{ spent|money }}</strong><span class="ks-kpi-note">Expenses and maintenance costs</span></div>
+  <div class="ks-kpi ks-kpi--net {% if net >= 0 %}pos{% else %}neg{% endif %}"><small>Profit</small><strong>{% if net < 0 %}−{% endif %}{{ net|abs_value|money }}</strong><span class="ks-kpi-note">{% if margin is not None %}{{ margin }}% of money in{% else %}No income in this period{% endif %}</span></div>
+  <div class="ks-kpi"><small>Owed by guests</small><strong>{{ receivable|money }}</strong><span class="ks-kpi-note">All open balances, today</span></div>
+</div>
+{% if unreviewed %}<a href="{% url 'dashboard:till' %}" class="ks-pill ks-pill--sun fs-6 text-decoration-none mb-4 d-inline-flex"><i class="bi bi-safe"></i> {{ unreviewed }} till close{{ unreviewed|pluralize }} waiting for sign-off</a>{% endif %}
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    <div class="ks-card h-100">
+      <div class="ks-card-title">In, out and profit — 12 months</div>
+      <canvas id="trend" height="120" aria-label="Income, expenses and profit by month"></canvas>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="ks-card h-100">
+      <div class="ks-card-title">Money in by method</div>
+      {% for m in by_method %}
+      <div class="d-flex justify-content-between py-2 border-bottom"><span>{{ m.label }} <span class="ks-small ks-muted">{{ m.n }}×</span></span><strong>{{ m.total|money }}</strong></div>
+      {% empty %}<div class="ks-empty">No payments in this period.</div>{% endfor %}
+      <a href="{% url 'dashboard:till' %}" class="btn btn-sm btn-ghost mt-3"><i class="bi bi-safe"></i> Till closes</a>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="ks-card h-100">
+      <div class="ks-card-title"><span>Where the money went</span><a class="btn btn-sm btn-ghost" href="{% url 'dashboard:expenses' %}?from={{ start|date:'Y-m-d' }}&to={{ end|date:'Y-m-d' }}">All expenses</a></div>
+      {% for c in by_cat %}
+      <div class="ks-hbar"><i class="bi bi-{{ c.icon }}"></i><span>{{ c.label }} <span class="ks-small ks-muted">{{ c.n }}×</span></span><strong>{{ c.total|money }}</strong><div class="track"><span style="width: {{ c.pct }}%"></span></div></div>
+      {% empty %}<div class="ks-empty">No expenses recorded for this period. <a href="{% url 'dashboard:expenses' %}#add">Record the first one</a>.</div>{% endfor %}
+    </div>
+  </div>
+  <div class="col-xl-7">
+    <div class="ks-card h-100">
+      <div class="ks-card-title">Profit by apartment</div>
+      <div class="table-responsive"><table class="ks-table">
+        <thead><tr><th>Apartment</th><th class="text-end">In</th><th class="text-end">Direct costs</th><th class="text-end">Profit</th></tr></thead>
+        <tbody>
+        {% for r in apt_rows %}
+        <tr><td><span class="ks-plaque position-static me-2" style="font-size:.8rem;padding:.1rem .4rem">{{ r.apt.number }}</span>{{ r.apt.name }}</td><td class="text-end">{{ r.income|money }}</td><td class="text-end">{{ r.costs|money }}</td><td class="text-end fw-bold {% if r.net < 0 %}text-danger{% endif %}">{% if r.net < 0 %}−{% endif %}{{ r.net|abs_value|money }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% if shared %}<p class="ks-small ks-muted mb-0 mt-2">Plus {{ shared|money }} of shared costs (salaries, NAWEC, security…) not tied to one apartment.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="ks-card">
+      <div class="ks-card-title"><span>Who owes money</span><span class="ks-small ks-muted fw-normal">Open balances by how long they've been due</span></div>
+      <div class="ks-aging">
+        {% for bk in buckets %}
+        <div class="{{ bk.key }}">
+          <span class="ks-small fw-semibold">{{ bk.label }}</span>
+          <strong>{{ bk.total|money }}</strong>
+          <span class="ks-small ks-muted">{{ bk.hint }}</span>
+          <ul>{% for b in bk.items|slice:":5" %}<li><a href="{% url 'dashboard:booking' b.pk %}">{{ b.guest.full_name|truncatechars:20 }}</a><span>{{ b.balance|money }}</span></li>{% endfor %}
+          {% if bk.items|length > 5 %}<li class="ks-muted">and {{ bk.items|length|add:"-5" }} more</li>{% endif %}</ul>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ trend|json_script:"trend-data" }}
+<script>
+(function () {
+  const t = JSON.parse(document.getElementById("trend-data").textContent);
+  new Chart(document.getElementById("trend"), {
+    data: { labels: t.labels, datasets: [
+      { type: "bar", label: "Money in", data: t.income, backgroundColor: "#1F6F50", borderRadius: 6, maxBarThickness: 26 },
+      { type: "bar", label: "Money out", data: t.expenses, backgroundColor: "#B8336A", borderRadius: 6, maxBarThickness: 26 },
+      { type: "line", label: "Profit", data: t.net, borderColor: "#F2B705", backgroundColor: "#F2B705", tension: .3, pointRadius: 3, borderWidth: 3 },
+    ]},
+    options: { interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "bottom", labels: { usePointStyle: true } } },
+      scales: { y: { grid: { color: "#EAF2F1" } }, x: { grid: { display: false } } } }
+  });
+})();
+</script>
+{% endblock %}

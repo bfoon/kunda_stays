@@ -83,6 +83,17 @@ class Apartment(Base):
     is_featured = models.BooleanField(default=False)
     accent = models.CharField(max_length=7, default="#0B4F5C", help_text="Colour used for this unit on the occupancy chart")
 
+    HK_DIRTY = "dirty"
+    HK_CLEANING = "cleaning"
+    HK_CLEAN = "clean"
+    HK_INSPECTED = "inspected"
+    HK_CHOICES = [(HK_DIRTY, "Needs cleaning"), (HK_CLEANING, "Being cleaned"), (HK_CLEAN, "Clean"), (HK_INSPECTED, "Inspected · guest-ready")]
+    HK_FLOW = [HK_DIRTY, HK_CLEANING, HK_CLEAN, HK_INSPECTED]
+    housekeeping = models.CharField(max_length=12, choices=HK_CHOICES, default=HK_INSPECTED)
+    housekeeping_note = models.CharField(max_length=200, blank=True)
+    housekeeping_at = models.DateTimeField(null=True, blank=True)
+    housekeeping_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
     class Meta:
         ordering = ["number"]
 
@@ -108,6 +119,10 @@ class Apartment(Base):
     @property
     def is_bookable(self):
         return self.status == self.AVAILABLE
+
+    @property
+    def is_guest_ready(self):
+        return self.housekeeping == self.HK_INSPECTED
 
 
 class ApartmentPhoto(Base):
@@ -409,3 +424,187 @@ class ContactInquiry(Base):
 
     def __str__(self):
         return f"{self.name}: {self.message[:40]}"
+
+
+# ===================== Operations portal =====================
+
+class RateRule(Base):
+    """A pricing rule. Rules stack in priority order for every night they cover:
+    a fixed price replaces the running nightly price, percent and amount rules adjust it."""
+    PERCENT = "percent"
+    AMOUNT = "amount"
+    FIXED = "fixed"
+    TYPE_CHOICES = [(PERCENT, "Change by %"), (AMOUNT, "Change by amount per night"), (FIXED, "Set nightly price")]
+    WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    name = models.CharField(max_length=80)
+    apartments = models.ManyToManyField(Apartment, blank=True, related_name="rate_rules", help_text="Leave empty for every apartment")
+    start = models.DateField()
+    end = models.DateField(help_text="Last night covered (inclusive)")
+    weekdays = models.CharField(max_length=7, default="0123456", help_text="Nights of the week, 0 = Monday")
+    adjust_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default=PERCENT)
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+    min_nights = models.PositiveSmallIntegerField(default=0, help_text="Only for stays at least this long (0 = any stay)")
+    priority = models.SmallIntegerField(default=10, help_text="Lower runs first")
+    is_active = models.BooleanField(default=True)
+    colour = models.CharField(max_length=7, default="#F2B705")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["priority", "start", "created_at"]
+        constraints = [models.CheckConstraint(condition=Q(end__gte=F("start")), name="raterule_end_after_start")]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def weekday_labels(self):
+        if len(self.weekdays) == 7:
+            return "Every night"
+        return ", ".join(self.WEEKDAYS[int(c)] for c in self.weekdays if c.isdigit())
+
+    @property
+    def effect_label(self):
+        v = self.value.normalize() if self.value == self.value.to_integral_value() else self.value
+        v = Decimal(int(v)) if v == v.to_integral_value() else v
+        sym = settings.KUNDA["currency_symbol"]
+        if self.adjust_type == self.FIXED:
+            return f"{sym} {v:,.0f} a night"
+        sign = "+" if v >= 0 else "−"
+        if self.adjust_type == self.PERCENT:
+            return f"{sign}{abs(v)}%"
+        return f"{sign}{sym} {abs(v):,.0f} a night"
+
+    def covers(self, day, stay_nights):
+        return (
+            self.is_active and self.start <= day <= self.end and str(day.weekday()) in self.weekdays
+            and stay_nights >= self.min_nights
+        )
+
+    def apply(self, price):
+        if self.adjust_type == self.FIXED:
+            return self.value
+        if self.adjust_type == self.PERCENT:
+            return price * (Decimal(100) + self.value) / Decimal(100)
+        return price + self.value
+
+
+class Expense(Base):
+    CATEGORY_CHOICES = [
+        ("electricity", "Electricity (NAWEC)"),
+        ("water", "Water"),
+        ("fuel", "Generator fuel"),
+        ("internet", "Internet"),
+        ("salaries", "Salaries & wages"),
+        ("cleaning", "Cleaning & laundry"),
+        ("supplies", "Guest supplies"),
+        ("repairs", "Repairs & parts"),
+        ("security", "Security"),
+        ("marketing", "Marketing & commissions"),
+        ("tax", "Taxes & licences"),
+        ("rent", "Rent & lease"),
+        ("other", "Other"),
+    ]
+    METHOD_CHOICES = [("cash", "Cash"), ("wave", "Wave"), ("afrimoney", "Afrimoney"), ("qmoney", "QMoney"), ("bank", "Bank transfer"), ("card", "Card")]
+
+    spent_on = models.DateField(db_index=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="other", db_index=True)
+    description = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payee = models.CharField(max_length=120, blank=True)
+    method = models.CharField(max_length=15, choices=METHOD_CHOICES, default="cash")
+    reference = models.CharField(max_length=80, blank=True)
+    apartment = models.ForeignKey(Apartment, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses", help_text="Leave empty for the whole property")
+    receipt = models.FileField(upload_to="expenses/%Y/%m/", blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["-spent_on", "-created_at"]
+
+    def __str__(self):
+        return f"{self.get_category_display()}: {self.amount}"
+
+
+class CashUp(Base):
+    """End-of-shift till count: what the system says a staff member took in vs. what they counted."""
+    business_date = models.DateField(db_index=True)
+    staff = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cashups")
+    expected_cash = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO)
+    counted_cash = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO)
+    float_amount = models.DecimalField(max_digits=12, decimal_places=2, default=ZERO, help_text="Opening float left in the till")
+    counts = models.JSONField(default=dict, blank=True, help_text="Denomination → number of notes/coins")
+    methods = models.JSONField(default=dict, blank=True, help_text="Method → {total, count, checked}")
+    note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-business_date", "-created_at"]
+
+    def __str__(self):
+        return f"Till {self.business_date} · {self.staff}"
+
+    @property
+    def variance(self):
+        return self.counted_cash - self.float_amount - self.expected_cash
+
+
+class ActivityLog(Base):
+    CATEGORY_CHOICES = [
+        ("auth", "Sign-in"), ("booking", "Bookings"), ("payment", "Payments"), ("rates", "Pricing"),
+        ("finance", "Finance"), ("property", "Property"), ("housekeeping", "Housekeeping"), ("staff", "Staff"),
+    ]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="activity")
+    actor = models.CharField(max_length=80, blank=True, help_text="Shown when there is no user, e.g. Guest or System")
+    category = models.CharField(max_length=15, choices=CATEGORY_CHOICES, db_index=True)
+    summary = models.CharField(max_length=255)
+    link = models.CharField(max_length=255, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.summary
+
+    @property
+    def who(self):
+        if self.user_id:
+            return self.user.get_full_name() or self.user.get_username()
+        return self.actor or "System"
+
+
+class PropertyProfile(models.Model):
+    """Business details editable from the portal. Blank fields fall back to the .env values."""
+    FIELD_MAP = [  # model field -> settings.KUNDA key
+        "name", "tagline", "phone", "whatsapp", "email", "address", "lat", "lng", "checkin_time", "checkout_time",
+        "wave_number", "afrimoney_number", "qmoney_number", "bank_details", "house_rules", "cancellation_policy",
+    ]
+
+    name = models.CharField(max_length=120, blank=True)
+    tagline = models.CharField(max_length=160, blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    whatsapp = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.CharField(max_length=200, blank=True)
+    lat = models.CharField(max_length=20, blank=True)
+    lng = models.CharField(max_length=20, blank=True)
+    checkin_time = models.CharField(max_length=5, blank=True)
+    checkout_time = models.CharField(max_length=5, blank=True)
+    hold_hours = models.PositiveSmallIntegerField(null=True, blank=True)
+    wave_number = models.CharField(max_length=40, blank=True)
+    afrimoney_number = models.CharField(max_length=40, blank=True)
+    qmoney_number = models.CharField(max_length=40, blank=True)
+    bank_details = models.CharField(max_length=255, blank=True)
+    house_rules = models.TextField(blank=True)
+    cancellation_policy = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    def __str__(self):
+        return "Property profile"
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

@@ -1,7 +1,7 @@
 """Demo data: amenities, apartments with generated photos, guests, bookings, payments."""
 import os
 import random
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
 
@@ -190,4 +190,59 @@ class Command(BaseCommand):
         )
         MaintenanceTicket.objects.get_or_create(apartment=apts[2], title="Balcony door handle loose", defaults=dict(priority="low"))
         ContactInquiry.objects.get_or_create(name="Isatou Bah", defaults=dict(phone="+220 7001122", message="Do you offer airport pickup for a family of 5 arriving on the 14th?", apartment=apts[3]))
+        self._seed_portal(apts, admin, today)
         self.stdout.write(self.style.SUCCESS(f"Seeded {len(apts)} apartments and {Booking.objects.count()} bookings."))
+
+    def _seed_portal(self, apts, admin, today):
+        """Staff for each role, starter price rules, a few months of expenses and a till close."""
+        from django.contrib.auth import get_user_model
+
+        from dashboard.pricing import presets
+        from dashboard.roles import FINANCE, FRONT_DESK, HOUSEKEEPING, MANAGER, set_role
+        from stays.models import Apartment, CashUp, Expense, RateRule
+
+        User = get_user_model()
+        demo_pw = os.environ.get("DEMO_STAFF_PASSWORD", "kunda-demo-2026")
+        team = [("awa", "Awa", "Sanneh", FRONT_DESK), ("musa", "Musa", "Jobe", FINANCE), ("binta", "Binta", "Camara", HOUSEKEEPING), ("ida", "Ida", "Faye", MANAGER)]
+        for username, first, last, role in team:
+            u, created = User.objects.get_or_create(username=username, defaults=dict(first_name=first, last_name=last, is_staff=True, email=f"{username}@kunda.gm"))
+            if created:
+                u.set_password(demo_pw)
+                u.save()
+            set_role(u, role)
+        self.stdout.write(self.style.SUCCESS(f"Demo staff: awa (front desk), musa (finance), binta (housekeeping), ida (manager) — password {demo_pw}"))
+
+        for p in presets(today):
+            if p["label"] in ("Tourist high season", "Weekend nights", "Week-long stay"):
+                RateRule.objects.get_or_create(name=p["name"], defaults=dict(
+                    start=date.fromisoformat(p["start"]), end=date.fromisoformat(p["end"]), adjust_type=p["type"], value=Decimal(p["value"]), weekdays=p["weekdays"],
+                    min_nights=p["min_nights"], colour=p["colour"], created_by=admin,
+                    priority={"Week-long stay": 20}.get(p["label"], 10),
+                ))
+
+        if not Expense.objects.exists():
+            monthly = [
+                ("electricity", "Cash Power top-up", 9500, "NAWEC", None), ("water", "Water bill", 2100, "NAWEC", None),
+                ("fuel", "Generator diesel", 6800, "GAM Petroleum", None), ("internet", "Fibre internet", 3500, "Gamtel", None),
+                ("salaries", "Cleaning and security wages", 28000, "Staff", None), ("supplies", "Toiletries, coffee, tea", 3200, "Kairaba Supermarket", None),
+            ]
+            for m in range(0, 6):
+                month_day = (today.replace(day=1) - timedelta(days=30 * m)).replace(day=5)
+                if month_day > today:
+                    month_day = today
+                for cat, desc, amt, payee, _ in monthly:
+                    Expense.objects.create(spent_on=month_day, category=cat, description=desc, amount=Decimal(amt + random.randint(-400, 600)),
+                                           payee=payee, method="cash" if cat in ("supplies", "salaries") else "wave", recorded_by=admin)
+            Expense.objects.create(spent_on=today - timedelta(days=3), category="repairs", description="New AC capacitor", amount=Decimal(1800),
+                                   payee="Modou (technician)", apartment=apts[2], recorded_by=admin)
+            Expense.objects.create(spent_on=today - timedelta(days=8), category="cleaning", description="Laundry — bed linen", amount=Decimal(2400),
+                                   payee="Bakau Laundry", recorded_by=admin)
+
+        # Rooms vacated recently need turning over
+        Apartment.objects.filter(number__in=[apts[0].number, apts[3].number]).update(housekeeping=Apartment.HK_DIRTY, housekeeping_note="Checked out")
+        Apartment.objects.filter(number=apts[5].number).update(housekeeping=Apartment.HK_CLEANING)
+
+        awa = User.objects.get(username="awa")
+        if not CashUp.objects.exists():
+            CashUp.objects.create(business_date=today - timedelta(days=1), staff=awa, expected_cash=Decimal(4500), counted_cash=Decimal(5400),
+                                  float_amount=Decimal(1000), counts={"200": 20, "100": 10, "25": 16}, note="D100 short — change for Apt 203 taxi")

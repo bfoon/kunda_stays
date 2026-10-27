@@ -5,6 +5,7 @@
 {% block actions %}
 <a href="{% url 'dashboard:booking_new' %}" class="btn btn-ks"><i class="bi bi-plus-lg"></i> New booking</a>
 <a href="{% url 'dashboard:tape' %}" class="btn btn-ghost"><i class="bi bi-calendar3-range"></i> Occupancy chart</a>
+{% if 'till' in portal.sections %}<a href="{% url 'dashboard:till' %}" class="btn btn-ghost"><i class="bi bi-safe"></i> Close the till</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="ks-kpis">
@@ -28,7 +29,7 @@
       <div class="ks-card-title"><span><i class="bi bi-box-arrow-in-right text-success"></i> Arriving today</span></div>
       {% for b in arrivals %}
       <div class="d-flex align-items-center justify-content-between gap-2 py-2 border-bottom">
-        <div><span class="ks-plaque position-static me-2" style="font-size:.85rem;padding:.15rem .45rem">{{ b.apartment.number }}</span><a href="{% url 'dashboard:booking' b.pk %}" class="fw-semibold">{{ b.guest.full_name }}</a> <span class="ks-small ks-muted">{{ b.nights }}n{% if b.balance %} · owes {{ b.balance|money }}{% endif %}</span></div>
+        <div><span class="ks-plaque position-static me-2" style="font-size:.85rem;padding:.15rem .45rem">{{ b.apartment.number }}</span><a href="{% url 'dashboard:booking' b.pk %}" class="fw-semibold">{{ b.guest.full_name }}</a> <span class="ks-small ks-muted">{{ b.nights }}n{% if b.balance %} · owes {{ b.balance|money }}{% endif %}</span>{% if not b.apartment.is_guest_ready %} <a href="{% url 'dashboard:housekeeping' %}" class="ks-pill ks-pill--bougain text-decoration-none" title="Housekeeping hasn't marked this room ready"><i class="bi bi-stars"></i> Room: {{ b.apartment.get_housekeeping_display|lower }}</a>{% endif %}</div>
         <form method="post" action="{% url 'dashboard:booking' b.pk %}">{% csrf_token %}<input type="hidden" name="action" value="check_in"><button class="btn btn-sm btn-ks">Check in</button></form>
       </div>
       {% empty %}<div class="ks-empty">No arrivals today.</div>{% endfor %}

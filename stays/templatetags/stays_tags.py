@@ -70,3 +70,22 @@ def qs(context, **kwargs):
 @register.filter
 def get_item(d, key):
     return d.get(key) if hasattr(d, "get") else None
+
+
+@register.filter
+def safe_json(value):
+    """JSON for an HTML attribute, e.g. data-preset='{{ p|safe_json }}'."""
+    import json
+
+    from django.utils.html import escape
+    from django.utils.safestring import mark_safe
+
+    return mark_safe(escape(json.dumps(value, default=str)))
+
+
+@register.filter
+def abs_value(value):
+    try:
+        return abs(value)
+    except TypeError:
+        return value

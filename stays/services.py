@@ -20,18 +20,60 @@ def _q(value):
 
 # ---------- pricing ----------
 
+def rules_for(apartment, start, end):
+    """Active price rules touching [start, end) for this apartment, in the order they stack."""
+    from django.db.models import Q
+
+    from .models import RateRule
+
+    return list(
+        RateRule.objects.filter(is_active=True, start__lt=end, end__gte=start)
+        .filter(Q(apartments=None) | Q(apartments=apartment)).distinct().order_by("priority", "start", "created_at")
+    )
+
+
+def nightly_prices(apartment, check_in, check_out, stay_nights=None, rules=None):
+    """[(date, price, [(rule, delta), ...]), ...] — one entry per night."""
+    stay_nights = stay_nights or (check_out - check_in).days
+    if rules is None:
+        rules = rules_for(apartment, check_in, check_out)
+    nights = []
+    day = check_in
+    while day < check_out:
+        price = apartment.daily_rate
+        applied = []
+        for rule in rules:
+            if rule.covers(day, stay_nights):
+                new_price = max(rule.apply(price), ZERO)
+                applied.append((rule, new_price - price))
+                price = new_price
+        nights.append((day, _q(price), applied))
+        day += timedelta(days=1)
+    return nights
+
+
 def quote(apartment, check_in, check_out, discount=ZERO):
     nights = (check_out - check_in).days
     if nights <= 0:
         raise BookingError("Check-out must be after check-in.")
     daily = apartment.daily_rate
     monthly = apartment.monthly_rate
-    nightly_total = daily * nights
+    per_night = nightly_prices(apartment, check_in, check_out, nights)
+    nightly_total = sum((p for _, p, _ in per_night), ZERO)
+    base_subtotal = daily * nights
+
+    adjustments = {}
+    for _, _, applied in per_night:
+        for rule, delta in applied:
+            adjustments[rule.name] = adjustments.get(rule.name, ZERO) + delta
+
     plan = "daily"
     if monthly and nights >= 30:
         months, rest = divmod(nights, 30)
-        subtotal = monthly * months + min(daily * rest, monthly)
+        rest_total = sum((p for _, p, _ in per_night[nights - rest:]), ZERO) if rest else ZERO
+        subtotal = monthly * months + min(rest_total, monthly)
         plan = "monthly"
+        adjustments = {}  # monthly contracts ignore nightly rules
     else:
         subtotal = nightly_total
     cleaning = apartment.cleaning_fee or ZERO
@@ -41,6 +83,9 @@ def quote(apartment, check_in, check_out, discount=ZERO):
         "nights": nights,
         "rate_plan": plan,
         "nightly_rate": daily,
+        "average_nightly": _q(nightly_total / nights),
+        "base_subtotal": _q(base_subtotal),
+        "adjustments": [{"name": n, "amount": _q(a)} for n, a in adjustments.items() if _q(a) != ZERO],
         "subtotal": _q(subtotal),
         "cleaning_fee": _q(cleaning),
         "discount": _q(discount or ZERO),
@@ -52,7 +97,14 @@ def quote(apartment, check_in, check_out, discount=ZERO):
 
 
 def quote_json(q):
-    return {k: (str(v) if isinstance(v, Decimal) else v) for k, v in q.items()}
+    def conv(v):
+        if isinstance(v, Decimal):
+            return str(v)
+        if isinstance(v, list):
+            return [{k: conv(x) for k, x in item.items()} for item in v]
+        return v
+
+    return {k: conv(v) for k, v in q.items()}
 
 
 # ---------- availability ----------

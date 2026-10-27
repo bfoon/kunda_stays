@@ -1,0 +1,158 @@
+{% extends "dashboard/base.html" %}
+{% load stays_tags %}
+{% block title %}Rates & pricing{% endblock %}
+{% block heading %}Rates &amp; pricing{% endblock %}
+{% block actions %}
+<a href="#rule-form" class="btn btn-ks"><i class="bi bi-plus-lg"></i> New price rule</a>
+<a href="#base-rates" class="btn btn-ghost"><i class="bi bi-pencil-square"></i> Base rates</a>
+{% endblock %}
+{% block content %}
+<div class="ks-card mb-4">
+  <div class="ks-card-title">
+    <span>Nightly prices in {{ month|date:"F Y" }}</span>
+    <span class="d-flex gap-1">
+      <a class="btn btn-sm btn-ghost" href="?month={{ prev|date:'Y-m' }}" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+      <a class="btn btn-sm btn-ghost" href="?month={{ today|date:'Y-m' }}">This month</a>
+      <a class="btn btn-sm btn-ghost" href="?month={{ next|date:'Y-m' }}" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+    </span>
+  </div>
+  <p class="ks-small ks-muted mt-n2">What one night costs, after every active rule. Week-long and other minimum-stay discounts aren't shown here because they depend on the stay length — test them with the quote checker below.</p>
+  <div class="ks-heat-wrap">
+    <div class="ks-heat" style="--days: {{ days|length }}">
+      <div class="ks-heat-row ks-heat-head">
+        <div class="ks-heat-label"><small>Apartment</small></div>
+        {% for d in days %}<div class="ks-heat-cell {% if d == today %}today{% endif %}" style="grid-column: {{ forloop.counter|add:1 }}">{{ d|date:"D"|slice:":2" }}<strong>{{ d|date:"j" }}</strong></div>{% endfor %}
+      </div>
+      {% for l in lanes %}
+      <div class="ks-heat-row ks-heat-lane">
+        <div class="ks-heat-label"><span title="{{ l.rule.name }}">{{ l.rule.name }}</span></div>
+        <a class="ks-lane-bar" href="?month={{ month|date:'Y-m' }}&edit={{ l.rule.pk }}#rule-form" style="grid-column: {{ l.col }} / span {{ l.span }}; --c: {{ l.rule.colour }}" title="{{ l.rule.name }}: {{ l.rule.effect_label }} · {{ l.rule.weekday_labels }}{% if l.rule.min_nights %} · {{ l.rule.min_nights }}+ nights{% endif %}">{{ l.rule.effect_label }}{% if l.rule.weekdays|length < 7 %} · {{ l.rule.weekday_labels }} nights{% endif %}{% if l.apts %} · {{ l.apts }} apt{{ l.apts|pluralize }}{% endif %}</a>
+      </div>
+      {% endfor %}
+      <div class="ks-heat-body">
+      {% for r in rows %}
+      <div class="ks-heat-row">
+        <div class="ks-heat-label"><strong>{{ r.apt.number }} · {{ r.apt.name|truncatechars:16 }}</strong><small>Base {{ r.apt.daily_rate|money }} · {{ r.booked_nights }} booked</small></div>
+        {% for c in r.cells %}<div class="ks-heat-cell lv-{{ c.level }} {% if c.booked %}is-booked{% endif %} {% if c.past %}is-past{% endif %}" style="grid-column: {{ forloop.counter|add:1 }}" title="Apt {{ r.apt.number }}, {{ c.day|date:'D j M' }}: {{ c.price|money }}{% if c.rules %} ({{ c.rules }}){% endif %}{% if c.booked %} — booked{% endif %}">{{ c.short }}</div>{% endfor %}
+      </div>
+      {% empty %}<div class="ks-empty">Add apartments to see prices.</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="ks-heat-legend">
+    <span style="--sw: #DDF0E6">Below base</span><span style="--sw: #fff">Base rate</span><span style="--sw: var(--ks-sun-soft)">Up to +15%</span><span style="--sw: var(--ks-sun)">Peak</span><span style="--sw: #DDEEF0">Set price</span>
+    <span class="ms-auto"><i class="bi bi-dash-lg"></i> underline = night already booked</span>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7 d-grid gap-4 align-content-start">
+    <div class="ks-card">
+      <div class="ks-card-title"><span>Price rules</span><span class="ks-small ks-muted fw-normal">Lower priority runs first; rules stack</span></div>
+      {% for r in rules %}
+      <div class="ks-rule {% if not r.is_active %}is-off{% endif %}" style="--c: {{ r.colour }}">
+        <div>
+          <div class="fw-semibold">{{ r.name }}{% if not r.is_active %} <span class="ks-pill ks-pill--muted">Paused</span>{% endif %}</div>
+          <div class="ks-small ks-muted">{{ r.start|date:"j M Y" }} – {{ r.end|date:"j M Y" }} · {{ r.weekday_labels }}{% if r.min_nights %} · stays of {{ r.min_nights }}+ nights{% endif %} · {% with n=r.apartments.all|length %}{% if n %}{{ n }} apartment{{ n|pluralize }}{% else %}all apartments{% endif %}{% endwith %} · priority {{ r.priority }}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="effect">{{ r.effect_label }}</span>
+          <div class="dropdown">
+            <button class="btn btn-sm btn-ghost" data-bs-toggle="dropdown" aria-label="Rule actions"><i class="bi bi-three-dots"></i></button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="?month={{ month|date:'Y-m' }}&edit={{ r.pk }}#rule-form"><i class="bi bi-pencil"></i> Edit</a></li>
+              <li><form method="post">{% csrf_token %}<input type="hidden" name="rule" value="{{ r.pk }}"><input type="hidden" name="month" value="{{ month|date:'Y-m' }}"><button class="dropdown-item" name="action" value="toggle_rule">{% if r.is_active %}<i class="bi bi-pause"></i> Pause{% else %}<i class="bi bi-play"></i> Switch on{% endif %}</button></form></li>
+              <li><form method="post">{% csrf_token %}<input type="hidden" name="rule" value="{{ r.pk }}"><input type="hidden" name="month" value="{{ month|date:'Y-m' }}"><button class="dropdown-item text-danger" name="action" value="delete_rule" data-confirm="Delete the rule “{{ r.name }}”? Existing bookings keep their price."><i class="bi bi-trash"></i> Delete</button></form></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      {% empty %}
+      <div class="ks-empty">No rules yet — every night costs the base rate. Start from a preset below.</div>
+      {% endfor %}
+    </div>
+
+    <form method="post" class="ks-card" id="rule-form" data-rule-form>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_rule"><input type="hidden" name="month" value="{{ month|date:'Y-m' }}">
+      <input type="hidden" name="rule" value="{{ edit.pk|default:'' }}">
+      <div class="ks-card-title"><span data-rule-title>{% if edit %}Edit “{{ edit.name }}”{% else %}New price rule{% endif %}</span>{% if edit %}<a href="?month={{ month|date:'Y-m' }}#rule-form" class="btn btn-sm btn-ghost">Start a new one</a>{% endif %}</div>
+      {% if not edit %}
+      <div class="mb-3"><div class="ks-small ks-muted mb-2">Start from a preset</div>
+        <div class="ks-presets">{% for p in presets %}<button type="button" data-preset='{{ p|safe_json }}'><i class="bi bi-{{ p.icon }}"></i> {{ p.label }}</button>{% endfor %}</div>
+      </div>
+      {% endif %}
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label" for="r-name">Name guests see on their quote</label><input id="r-name" name="name" class="form-control" value="{{ edit.name|default:'' }}" placeholder="e.g. High season" maxlength="80" required></div>
+        <div class="col-md-4"><label class="form-label" for="r-colour">Colour</label><input id="r-colour" type="color" name="colour" class="form-control form-control-color w-100" value="{{ edit.colour|default:'#F2B705' }}"></div>
+        <div class="col-6 col-md-4"><label class="form-label" for="r-start">First night</label><input id="r-start" type="date" name="start" class="form-control" value="{{ edit.start|date:'Y-m-d'|default:today|date:'Y-m-d' }}" required></div>
+        <div class="col-6 col-md-4"><label class="form-label" for="r-end">Last night</label><input id="r-end" type="date" name="end" class="form-control" value="{% if edit %}{{ edit.end|date:'Y-m-d' }}{% else %}{{ default_end }}{% endif %}" required></div>
+        <div class="col-md-4"><label class="form-label" for="r-type">Change</label><select id="r-type" name="adjust_type" class="form-select">{% for v, l in types %}<option value="{{ v }}" {% if edit.adjust_type == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label" for="r-value">Value</label><input id="r-value" type="number" step="0.01" name="value" class="form-control" value="{{ edit.value|floatformat:'-2u'|default:'' }}" required><div class="ks-small ks-muted" data-value-hint></div></div>
+        <div class="col-6 col-md-4"><label class="form-label" for="r-min">Minimum stay</label><div class="input-group"><input id="r-min" type="number" min="0" name="min_nights" class="form-control" value="{{ edit.min_nights|default:0 }}"><span class="input-group-text">nights</span></div><div class="ks-small ks-muted">0 = any length</div></div>
+        <div class="col-6 col-md-4"><label class="form-label" for="r-prio">Priority</label><input id="r-prio" type="number" name="priority" class="form-control" value="{{ edit.priority|default:10 }}"><div class="ks-small ks-muted">Lower runs first</div></div>
+        <div class="col-12"><span class="form-label d-block">Nights of the week</span>
+          <div class="ks-daypick">{% for i, d in weekdays %}<label><input type="checkbox" name="weekdays" value="{{ i }}" {% if not edit or i|stringformat:'d' in edit.weekdays %}checked{% endif %}><span>{{ d }}</span></label>{% endfor %}</div>
+          <div class="ks-small ks-muted mt-1">The night of arrival counts — tick Fri and Sat for weekend pricing.</div>
+        </div>
+        <div class="col-12"><span class="form-label d-block">Apartments <span class="ks-muted fw-normal">— none ticked means all</span></span>
+          <div class="ks-chips">{% for a in apartments %}<label><input type="checkbox" name="apartments" value="{{ a.pk }}" {% if a.id in edit_apts %}checked{% endif %}><span>{{ a.number }} · {{ a.name|truncatechars:18 }}</span></label>{% endfor %}</div>
+        </div>
+        <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" name="is_active" id="r-active" {% if not edit or edit.is_active %}checked{% endif %}><label class="form-check-label" for="r-active">Active — quotes use it immediately</label></div>
+          <button class="btn btn-ks"><i class="bi bi-check2"></i> Save rule</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-xl-5 d-grid gap-4 align-content-start">
+    <form class="ks-card" data-quote-tester>
+      <div class="ks-card-title">Check a quote</div>
+      <p class="ks-small ks-muted mt-n2">Exactly what a guest would see on the website.</p>
+      <div class="row g-2">
+        <div class="col-12"><label class="form-label" for="t-apt">Apartment</label><select id="t-apt" name="apt" class="form-select">{% for a in apartments %}<option value="{% url 'stays:availability' a.slug %}">{{ a.number }} · {{ a.name }}</option>{% endfor %}</select></div>
+        <div class="col-6"><label class="form-label" for="t-ci">Arrive</label><input id="t-ci" type="date" name="t_ci" class="form-control" value="{{ today|date:'Y-m-d' }}"></div>
+        <div class="col-6"><label class="form-label" for="t-co">Leave</label><input id="t-co" type="date" name="t_co" class="form-control"></div>
+        <div class="col-12 d-grid"><button class="btn btn-ghost"><i class="bi bi-calculator"></i> Show the price</button></div>
+      </div>
+      <div class="mt-3" data-quote-out aria-live="polite"></div>
+    </form>
+
+    <form method="post" class="ks-card">
+      {% csrf_token %}<input type="hidden" name="action" value="bulk_adjust"><input type="hidden" name="month" value="{{ month|date:'Y-m' }}">
+      <div class="ks-card-title">Change all base rates</div>
+      <p class="ks-small ks-muted mt-n2">For a yearly price review or when costs go up. Leave apartments unticked to change them all.</p>
+      <div class="row g-2 align-items-end">
+        <div class="col-6"><label class="form-label" for="b-pct">By</label><div class="input-group"><input id="b-pct" type="number" step="0.1" name="percent" class="form-control" placeholder="5" required><span class="input-group-text">%</span></div></div>
+        <div class="col-6"><label class="form-label" for="b-round">Round to</label><select id="b-round" name="round_to" class="form-select"><option value="10">{{ site.currency_symbol }} 10</option><option value="50" selected>{{ site.currency_symbol }} 50</option><option value="100">{{ site.currency_symbol }} 100</option></select></div>
+        <div class="col-12"><div class="ks-chips">{% for a in apartments %}<label><input type="checkbox" name="bulk_apts" value="{{ a.pk }}"><span>{{ a.number }}</span></label>{% endfor %}</div></div>
+        <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="include_monthly" id="b-monthly"><label class="form-check-label" for="b-monthly">Also change monthly rates</label></div></div>
+        <div class="col-12 d-grid"><button class="btn btn-ghost" data-confirm="Change the nightly rates now? Existing bookings keep their price.">Apply change</button></div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form method="post" class="ks-card mt-4" id="base-rates">
+  {% csrf_token %}<input type="hidden" name="action" value="save_base"><input type="hidden" name="month" value="{{ month|date:'Y-m' }}">
+  <div class="ks-card-title"><span>Base rates</span><button class="btn btn-sm btn-ks"><i class="bi bi-check2"></i> Save base rates</button></div>
+  <div class="table-responsive">
+    <table class="ks-table ks-base-table">
+      <thead><tr><th>Apartment</th><th>Per night ({{ site.currency_symbol }})</th><th>Per month ({{ site.currency_symbol }})</th><th>Cleaning fee</th><th>Deposit %</th><th class="text-end">Sleeps</th></tr></thead>
+      <tbody>
+      {% for a in apartments %}
+      <tr>
+        <td><a href="{% url 'dashboard:apartment_edit' a.pk %}">{{ a.number }} · {{ a.name }}</a></td>
+        <td><input type="number" step="0.01" min="1" name="daily_{{ a.pk }}" class="form-control form-control-sm" value="{{ a.daily_rate|floatformat:'2u' }}" aria-label="Nightly rate for {{ a.number }}"></td>
+        <td><input type="number" step="0.01" min="0" name="monthly_{{ a.pk }}" class="form-control form-control-sm" value="{{ a.monthly_rate|floatformat:'2u'|default:'' }}" placeholder="—" aria-label="Monthly rate for {{ a.number }}"></td>
+        <td><input type="number" step="0.01" min="0" name="cleaning_{{ a.pk }}" class="form-control form-control-sm" value="{{ a.cleaning_fee|floatformat:'2u' }}" aria-label="Cleaning fee for {{ a.number }}"></td>
+        <td><input type="number" min="0" max="100" name="deposit_{{ a.pk }}" class="form-control form-control-sm" value="{{ a.deposit_percent }}" aria-label="Deposit percent for {{ a.number }}"></td>
+        <td class="text-end">{{ a.capacity }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+{% endblock %}

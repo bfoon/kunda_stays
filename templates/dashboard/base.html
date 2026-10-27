@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
   <title>{% block title %}Dashboard{% endblock %} · {{ site.name }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -12,26 +13,56 @@
 </head>
 <body data-currency="{{ site.currency_symbol }}">
 <div class="ks-dash">
-  <aside class="ks-side" aria-label="Dashboard navigation">
+  <aside class="ks-side" aria-label="Portal navigation">
     <a class="brand" href="{% url 'dashboard:home' %}"><span class="ks-mark"></span>{{ site.name }}</a>
-    {% with u=request.resolver_match.url_name %}
-    <a class="link {% if u == 'home' %}active{% endif %}" href="{% url 'dashboard:home' %}"><i class="bi bi-grid-1x2"></i> Today</a>
-    <a class="link {% if u == 'tape' %}active{% endif %}" href="{% url 'dashboard:tape' %}"><i class="bi bi-calendar3-range"></i> Occupancy</a>
+    <button type="button" class="ks-side-search" data-palette-open><i class="bi bi-search"></i> Find anything <kbd>Ctrl K</kbd></button>
+    {% with u=request.resolver_match.url_name s=portal.sections b=portal.badges %}
+    {% if 'today' in s %}<a class="link {% if u == 'home' %}active{% endif %}" href="{% url 'dashboard:home' %}"><i class="bi bi-grid-1x2"></i> Today</a>{% endif %}
+    {% if 'front' in s %}<a class="link {% if u == 'tape' %}active{% endif %}" href="{% url 'dashboard:tape' %}"><i class="bi bi-calendar3-range"></i> Occupancy</a>{% endif %}
+
+    {% if 'front' in s %}
     <div class="ks-side-group">Front desk</div>
     <a class="link {% if u == 'bookings' or u == 'booking' %}active{% endif %}" href="{% url 'dashboard:bookings' %}"><i class="bi bi-journal-bookmark"></i> Bookings</a>
     <a class="link {% if u == 'booking_new' %}active{% endif %}" href="{% url 'dashboard:booking_new' %}"><i class="bi bi-plus-circle"></i> New booking</a>
-    <a class="link {% if u == 'payments' %}active{% endif %}" href="{% url 'dashboard:payments' %}"><i class="bi bi-cash-stack"></i> Payments</a>
     <a class="link {% if u == 'guests' or u == 'guest' %}active{% endif %}" href="{% url 'dashboard:guests' %}"><i class="bi bi-people"></i> Guests</a>
     <a class="link {% if u == 'messages' %}active{% endif %}" href="{% url 'dashboard:messages' %}"><i class="bi bi-whatsapp"></i> Messages</a>
+    {% endif %}
+
+    {% if 'payments' in s or 'till' in s or 'finance' in s or 'reports' in s %}
+    <div class="ks-side-group">Money</div>
+    {% if 'payments' in s %}<a class="link {% if u == 'payments' %}active{% endif %}" href="{% url 'dashboard:payments' %}"><i class="bi bi-cash-stack"></i> Payments{% if b.payments %}<span class="count" title="Waiting for verification">{{ b.payments }}</span>{% endif %}</a>{% endif %}
+    {% if 'till' in s %}<a class="link {% if u == 'till' %}active{% endif %}" href="{% url 'dashboard:till' %}"><i class="bi bi-safe"></i> Close the till</a>{% endif %}
+    {% if 'finance' in s %}
+    <a class="link {% if u == 'finance' %}active{% endif %}" href="{% url 'dashboard:finance' %}"><i class="bi bi-bank"></i> Finance</a>
+    <a class="link {% if u == 'expenses' %}active{% endif %}" href="{% url 'dashboard:expenses' %}"><i class="bi bi-receipt-cutoff"></i> Expenses</a>
+    {% endif %}
+    {% if 'reports' in s %}<a class="link {% if u == 'reports' %}active{% endif %}" href="{% url 'dashboard:reports' %}"><i class="bi bi-graph-up-arrow"></i> Reports</a>{% endif %}
+    {% endif %}
+
+    {% if 'housekeeping' in s or 'maintenance' in s or 'property' in s %}
     <div class="ks-side-group">Property</div>
-    <a class="link {% if u == 'apartments' or u == 'apartment_edit' or u == 'apartment_new' %}active{% endif %}" href="{% url 'dashboard:apartments' %}"><i class="bi bi-building"></i> Apartments</a>
-    <a class="link {% if u == 'maintenance' %}active{% endif %}" href="{% url 'dashboard:maintenance' %}"><i class="bi bi-tools"></i> Maintenance</a>
-    <a class="link {% if u == 'reports' %}active{% endif %}" href="{% url 'dashboard:reports' %}"><i class="bi bi-graph-up-arrow"></i> Reports</a>
+    {% if 'housekeeping' in s %}<a class="link {% if u == 'housekeeping' %}active{% endif %}" href="{% url 'dashboard:housekeeping' %}"><i class="bi bi-stars"></i> Housekeeping{% if b.housekeeping %}<span class="count" title="Rooms to turn over">{{ b.housekeeping }}</span>{% endif %}</a>{% endif %}
+    {% if 'maintenance' in s %}<a class="link {% if u == 'maintenance' %}active{% endif %}" href="{% url 'dashboard:maintenance' %}"><i class="bi bi-tools"></i> Maintenance</a>{% endif %}
+    {% if 'property' in s %}
+    <a class="link {% if u == 'apartments' or u == 'apartment_edit' or u == 'apartment_new' %}active{% endif %}" href="{% url 'dashboard:apartments' %}"><i class="bi bi-building"></i> Apartments &amp; photos</a>
+    <a class="link {% if u == 'rates' %}active{% endif %}" href="{% url 'dashboard:rates' %}"><i class="bi bi-tags"></i> Rates &amp; pricing</a>
+    <a class="link {% if u == 'property' %}active{% endif %}" href="{% url 'dashboard:property' %}"><i class="bi bi-info-circle"></i> Property profile</a>
+    {% endif %}
+    {% endif %}
+
+    {% if 'staff' in s or 'logbook' in s %}
+    <div class="ks-side-group">Team</div>
+    {% if 'staff' in s %}<a class="link {% if u == 'staff' %}active{% endif %}" href="{% url 'dashboard:staff' %}"><i class="bi bi-person-gear"></i> Staff &amp; roles</a>{% endif %}
+    {% if 'logbook' in s %}<a class="link {% if u == 'logbook' %}active{% endif %}" href="{% url 'dashboard:logbook' %}"><i class="bi bi-journal-text"></i> Logbook</a>{% endif %}
+    {% endif %}
     {% endwith %}
-    <div class="ks-side-group">More</div>
-    <a class="link" href="{% url 'stays:home' %}" target="_blank"><i class="bi bi-box-arrow-up-right"></i> View website</a>
-    {% if user.is_superuser %}<a class="link" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Admin</a>{% endif %}
-    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="link btn btn-link w-100 text-start p-0" style="display:flex;gap:.7rem;padding:.55rem .7rem !important;color:#CFE2E5;text-decoration:none;font-weight:600"><i class="bi bi-box-arrow-left"></i> Log out ({{ user.get_username }})</button></form>
+
+    <div class="ks-side-foot">
+      <a class="ks-me" href="{% url 'dashboard:account' %}"><span class="av">{{ portal.initials }}</span><span><strong>{{ portal.display_name }}</strong><small><i class="bi bi-{{ portal.role_icon }}"></i> {{ portal.role }}</small></span></a>
+      <a class="link" href="{% url 'stays:home' %}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> View website</a>
+      {% if user.is_superuser %}<a class="link" href="{% url 'admin:index' %}"><i class="bi bi-shield-lock"></i> Django admin</a>{% endif %}
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="ks-logout"><i class="bi bi-box-arrow-left"></i> Sign out</button></form>
+    </div>
   </aside>
   <main class="ks-main">
     <div class="ks-topbar">
@@ -45,10 +76,24 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+
+<div class="modal fade ks-palette" id="ks-palette" tabindex="-1" aria-label="Find anything">
+  <div class="modal-dialog modal-dialog-scrollable" style="margin-top:12vh">
+    <div class="modal-content">
+      <div class="position-relative">
+        <i class="bi bi-search ks-palette-icon"></i>
+        <input class="form-control ks-palette-input" placeholder="Booking reference, guest name, phone or a page…" aria-label="Search" data-palette-input data-url="{% url 'dashboard:search' %}" autocomplete="off">
+      </div>
+      <ul class="ks-palette-list" data-palette-list role="listbox"></ul>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <script src="{% static 'js/ks.js' %}"></script>
+<script src="{% static 'js/portal.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -44,7 +44,7 @@
   <div class="ks-gallery mb-4" style="grid-template-columns:1fr;grid-template-rows:1fr"><div class="ks-placeholder" style="background:{{ apt.accent }}">{{ apt.number }}</div></div>
   {% endif %}
 
-  <div class="row g-5">
+  <div class="row g-4 g-lg-5">
     <div class="col-lg-7">
       <section class="mb-5">
         <h2 class="h3">About this apartment</h2>
@@ -74,6 +74,14 @@
           <li>Pay by Wave, Afrimoney, QMoney, bank transfer or cash at reception.</li>
           <li>Unpaid holds are released after {{ site.hold_hours }} hours.</li>
         </ul>
+        {% if site.house_rules %}
+        <h3 class="h5 mt-4">House rules</h3>
+        <ul class="ks-muted">{% for line in site.house_rules.splitlines %}{% if line.strip %}<li>{{ line.strip }}</li>{% endif %}{% endfor %}</ul>
+        {% endif %}
+        {% if site.cancellation_policy %}
+        <h3 class="h5 mt-4">Cancellation</h3>
+        <p class="ks-muted mb-0">{{ site.cancellation_policy|linebreaksbr }}</p>
+        {% endif %}
       </section>
     </div>
 

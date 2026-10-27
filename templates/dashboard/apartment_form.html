@@ -23,23 +23,27 @@
       </div>
 
       <div class="ks-card">
-        <div class="ks-card-title">Photos</div>
+        <div class="ks-card-title"><span>Photos</span>{% if photos %}<span class="ks-small ks-muted fw-normal">Drag to reorder · first photos show first</span>{% endif %}</div>
         {% if photos %}
-        <div class="row g-2 mb-3">
+        <div class="row g-3 mb-3" data-photo-grid>
           {% for p in photos %}
-          <div class="col-6 col-md-3">
-            <div class="ks-photo-tile"><img src="{{ p.image.url }}" alt="">
+          <div class="col-6 col-md-4 col-xxl-3" data-photo="{{ p.pk }}">
+            <div class="ks-photo-tile"><img src="{{ p.image.url }}" alt="{{ p.caption }}" draggable="false">
+              <span class="grip"><i class="bi bi-grip-vertical"></i></span>
+              {% if p.is_cover %}<span class="badge-cover ks-pill ks-pill--sun">Cover</span>{% endif %}
               <div class="ctrl">
                 <label><input type="radio" name="cover" value="{{ p.pk }}" {% if p.is_cover %}checked{% endif %}> Cover</label>
                 <label><input type="checkbox" name="delete_photo" value="{{ p.pk }}"> Delete</label>
               </div>
             </div>
+            <input name="caption_{{ p.pk }}" value="{{ p.caption }}" class="form-control ks-photo-cap" placeholder="Caption, e.g. Bedroom" maxlength="120" aria-label="Caption">
           </div>
           {% endfor %}
         </div>
+        <input type="hidden" name="photo_order" value="">
         {% endif %}
         <div class="ks-dropzone" data-input="photos" role="button" tabindex="0">
-          <i class="bi bi-cloud-arrow-up fs-2"></i><div class="fw-semibold">Drop photos here or click to choose</div><div class="ks-small">JPG or PNG, several at once is fine</div><div class="ks-drop-list ks-small mt-2"></div>
+          <i class="bi bi-cloud-arrow-up fs-2"></i><div class="fw-semibold">Drop photos here or click to choose</div><div class="ks-small">JPG or PNG, several at once is fine. Bright, wide shots of every room sell best.</div><div class="ks-drop-list ks-small mt-2"></div>
         </div>
         <input type="file" id="photos" name="photos" accept="image/*" multiple class="d-none">
       </div>
@@ -60,8 +64,19 @@
     </div>
 
     <div class="col-xl-4 d-grid gap-4 align-content-start">
+      {% if score %}
       <div class="ks-card">
-        <div class="ks-card-title">Rates</div>
+        <div class="ks-card-title">Listing strength</div>
+        <div class="ks-score">
+          <span class="ks-score-ring" style="--p: {{ score.score }}; --ring: {% if score.score >= 80 %}var(--ks-mangrove){% elif score.score >= 50 %}var(--ks-sun){% else %}var(--ks-bougain){% endif %}"><b>{{ score.score }}</b></span>
+          {% if score.todo %}<div><div class="fw-semibold ks-small mb-1">Next to improve</div><ul>{% for t in score.todo %}<li>{{ t }}</li>{% endfor %}</ul></div>
+          {% else %}<div class="ks-small"><strong>Complete.</strong> This listing has everything guests look for.</div>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+      <div class="ks-card">
+        <div class="ks-card-title"><span>Base rates</span><a href="{% url 'dashboard:rates' %}" class="btn btn-sm btn-ghost">Pricing rules</a></div>
+        {% if rules %}<div class="ks-small mb-3 p-2 rounded-3" style="background:var(--ks-sun-soft)"><i class="bi bi-tags"></i> Active rules for this unit: {% for r in rules %}<strong>{{ r.name }}</strong> ({{ r.effect_label }}){% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
         <div class="d-grid gap-3">
           <div><label class="form-label" for="daily_rate">Per night ({{ site.currency_symbol }})</label><input id="daily_rate" type="number" step="0.01" min="0" name="daily_rate" class="form-control" value="{{ apt.daily_rate|floatformat:'2u' }}" required></div>
           <div><label class="form-label" for="monthly_rate">Per month ({{ site.currency_symbol }}) <span class="ks-muted fw-normal">optional</span></label><input id="monthly_rate" type="number" step="0.01" min="0" name="monthly_rate" class="form-control" value="{{ apt.monthly_rate|floatformat:'2u'|default:'' }}"><div class="ks-small ks-muted">Used for stays of 30+ nights</div></div>
